@@ -15,7 +15,6 @@ Mockups 3D del iPhone Duo en sus tres posiciones (cerrado, semiabierto y abierto
 - **Pantalla completa y vista previa** para ver solo el Duo. Esc sale.
 - **Apariencia clara y oscura** según el sistema. También responde a movimiento reducido, transparencia reducida y más contraste.
 
-Las imágenes se procesan en el navegador. No se suben a ningún servidor.
 
 ## Usarlo en tu compu
 
@@ -35,27 +34,7 @@ npm run build
 npm run preview
 ```
 
-## Publicarlo en GitHub Pages
-
-1. Creá un repositorio en GitHub y subí este proyecto a la rama `main`.
-2. En el repositorio, entrá a **Settings → Pages** y en **Source** elegí **GitHub Actions**.
-3. Cada push a `main` corre `.github/workflows/deploy.yml`, compila la app y la publica en `https://<tu-usuario>.github.io/<repo>/`.
-
-La configuración de Vite usa rutas relativas, así que funciona con cualquier nombre de repositorio.
-
-## Estructura
-
-| Archivo | Qué tiene |
-| --- | --- |
-| `src/specs.ts` | Medidas del Duo, resoluciones y lógica de las seis vistas |
-| `src/device.ts` | Modelo 3D: cuerpo, bisagra, pantallas, cámaras y orientaciones |
-| `src/screens.ts` | Composición de la imagen de cada pantalla (recorte, giro y guías) |
-| `src/scene.ts` | Escena de Three.js, luces, sombra, cámara y exportación |
-| `src/main.ts` | Interfaz: grilla de pantallas, dial, inspector, deshacer y atajos |
-| `src/style.css` | Estilos con los tokens de diseño, en claro y oscuro |
 
 ## Notas
 
-- Los radios de esquina del cuerpo y de las pantallas son estimaciones a partir de fotos oficiales. Si Apple publica las plantillas de diseño del Duo, se ajustan en `src/device.ts`.
-- Los acabados (Titanio natural, Grafito, Blanco, Azul niebla) son de muestra.
 - iPhone y iPhone Duo son marcas de Apple Inc. Este proyecto no está afiliado a Apple.
