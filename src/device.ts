@@ -17,20 +17,26 @@ const EDGE_DEPTH = 1.7; // y cuánto sube por cada cara
 
 /** Contorno con un radio por esquina: [arriba-izq, arriba-der, abajo-der, abajo-izq]. */
 export function roundedShape(x0: number, y0: number, x1: number, y1: number, r: [number, number, number, number]): THREE.Shape {
-  const s = new THREE.Shape();
-  const [tl, tr, br, bl] = r;
-  s.moveTo(x0 + bl, y0);
-  s.lineTo(x1 - br, y0);
-  if (br) s.absarc(x1 - br, y0 + br, br, -Math.PI / 2, 0, false);
-  s.lineTo(x1, y1 - tr);
-  if (tr) s.absarc(x1 - tr, y1 - tr, tr, 0, Math.PI / 2, false);
-  s.lineTo(x0 + tl, y1);
-  if (tl) s.absarc(x0 + tl, y1 - tl, tl, Math.PI / 2, Math.PI, false);
-  s.lineTo(x0, y0 + bl);
-  if (bl) s.absarc(x0 + bl, y0 + bl, bl, Math.PI, Math.PI * 1.5, false);
-  return s;
+  const [tl, tr, br, bl] = r.map(v => (v < 0.05 ? 0 : v));
+  const pts: THREE.Vector2[] = [];
+  // Cada esquina: arco con centro adentro, o un vértice recto si el radio es 0. Sin puntos repetidos,
+  // porque un tramo de largo casi cero deforma el canto biselado del marco.
+  const corner = (cx: number, cy: number, rad: number, a0: number) => {
+    if (!rad) { pts.push(new THREE.Vector2(cx, cy)); return; }
+    const n = Math.max(6, Math.round(rad * 3));
+    for (let i = 0; i <= n; i++) {
+      const a = a0 + (Math.PI / 2) * (i / n);
+      pts.push(new THREE.Vector2(cx + rad * Math.cos(a), cy + rad * Math.sin(a)));
+    }
+  };
+  corner(x1 - br, y0 + br, br, -Math.PI / 2); // abajo-der
+  corner(x1 - tr, y1 - tr, tr, 0); // arriba-der
+  corner(x0 + tl, y1 - tl, tl, Math.PI / 2); // arriba-izq
+  corner(x0 + bl, y0 + bl, bl, Math.PI); // abajo-izq
+  const clean = pts.filter((p, i) => p.distanceTo(pts[(i + 1) % pts.length]) > 1e-4);
+  return new THREE.Shape(clean);
 }
-const inset = (r: [number, number, number, number], d: number) => r.map(v => Math.max(0.1, v - d)) as [number, number, number, number];
+const inset = (r: [number, number, number, number], d: number) => r.map(v => Math.max(0, v - d)) as [number, number, number, number];
 
 /** Geometría plana con UV normalizadas al rectángulo de la pantalla. */
 function screenGeometry(shape: THREE.Shape, ux0: number, ux1: number, vy0: number, vy1: number, mirrorU = false): THREE.ShapeGeometry {
@@ -60,12 +66,13 @@ export class DuoModel {
   private readonly pivot = new THREE.Group(); // eje de la bisagra
   private readonly moving = new THREE.Group(); // mitad izquierda, gira
   private readonly spine: THREE.Mesh;
+  private readonly crease: THREE.Mesh; // pantalla interior doblada sobre la bisagra
   readonly frameMat: THREE.MeshPhysicalMaterial;
   readonly backMat: THREE.MeshPhysicalMaterial;
   readonly islandMat: THREE.MeshPhysicalMaterial;
   readonly ringMat: THREE.MeshPhysicalMaterial;
-  readonly innerMat = new THREE.MeshBasicMaterial({ toneMapped: false });
-  readonly outerMat = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
+  readonly innerMat = new THREE.MeshBasicMaterial({ toneMapped: false, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
+  readonly outerMat = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -8 });
   readonly glareMat: THREE.MeshStandardMaterial;
   private readonly glare: THREE.Mesh[] = [];
   angle = 180;
@@ -152,7 +159,10 @@ export class DuoModel {
     // Lomo de la bisagra, visible con el Duo cerrado: canto recto de arriba abajo, esquinas sin redondear
     this.spine = new THREE.Mesh(new THREE.CylinderGeometry(DUO.thickFolded / 2 - 0.05, DUO.thickFolded / 2 - 0.05, H - 1, 48), this.frameMat);
     this.spine.position.set(DUO.thickFolded / 2 - (DUO.widthFolded - HALF_W), 0, HINGE_GAP / 2);
-    this.body.add(this.fixed, this.pivot, this.spine);
+    // Pliegue: la pantalla interior se curva alrededor del eje de la bisagra, así no queda una ranura entre las mitades
+    this.crease = new THREE.Mesh(new THREE.BufferGeometry(), this.innerMat);
+    this.crease.name = 'Pliegue';
+    this.body.add(this.fixed, this.pivot, this.spine, this.crease);
     this.root.add(this.body);
     this.body.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
     for (const g of this.glare) g.castShadow = false;
@@ -166,11 +176,41 @@ export class DuoModel {
 
   setReflections(on: boolean) { for (const g of this.glare) g.visible = on; }
 
+  /**
+   * Franja curva que une las dos mitades de la pantalla interior. Sigue un arco alrededor del eje de la bisagra,
+   * tangente a las dos pantallas, y toma la columna central de la imagen: la imagen se ve continua al plegar.
+   */
+  private updateCrease() {
+    const phi = THREE.MathUtils.degToRad(180 - this.angle);
+    this.crease.visible = this.angle > 0.5 && phi > 1e-3;
+    if (!this.crease.visible) return;
+    const zScreen = 0.04; // la pantalla interior está 0,04 mm delante del vidrio de cada mitad
+    const cz = HINGE_GAP / 2, r = cz - zScreen - 0.01, ih = INNER_MM[1], N = 16;
+    const E = 0.6, du = E / INNER_MM[0]; // se monta 0,6 mm sobre cada mitad para que no quede una rendija
+    const pos: number[] = [], uv: number[] = [], idx: number[] = [];
+    const row = (x: number, z: number, u: number) => { pos.push(x, -ih / 2, z, x, ih / 2, z); uv.push(u, 0, u, 1); };
+    row(E, cz - r, 0.5 + du); // sobre la mitad fija
+    for (let i = 0; i <= N; i++) {
+      const a = (phi * i) / N;
+      row(-r * Math.sin(a), cz - r * Math.cos(a), 0.5);
+    }
+    // sobre la mitad que gira, siguiendo su plano
+    row(-r * Math.sin(phi) - E * Math.cos(phi), cz - r * Math.cos(phi) + E * Math.sin(phi), 0.5 - du);
+    for (let i = 0; i < N + 2; i++) { const k = i * 2; idx.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); } // caras hacia el frente
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    g.setIndex(idx);
+    this.crease.geometry.dispose();
+    this.crease.geometry = g;
+  }
+
   /** Ángulo de la bisagra en grados: 0 cerrado, 180 abierto. */
   setAngle(deg: number) {
     this.angle = THREE.MathUtils.clamp(deg, 0, 180);
     this.pivot.rotation.y = THREE.MathUtils.degToRad(180 - this.angle);
     this.spine.visible = this.angle < 28;
+    this.updateCrease();
     this.recenter();
   }
 
