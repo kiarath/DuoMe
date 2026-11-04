@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DuoMe, mockups del iPhone Duo</title>
+  <meta name="description" content="Mockups 3D del iPhone Duo cerrado, semiabierto y abierto, en vertical u horizontal. Exportá PNG sin fondo." />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Encode+Sans+Expanded:wght@400;600&family=Familjen+Grotesk:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <span class="brand">DuoMe</span>
+      <div class="topbar-actions">
+        <button class="icon-btn" id="undo" aria-label="Deshacer" title="Deshacer (⌘Z)" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 0 0 4l4 4M0 4h10a6 6 0 0 1 0 12H6" /></svg>
+        </button>
+        <button class="icon-btn" id="redo" aria-label="Rehacer" title="Rehacer (⇧⌘Z)" disabled>
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m12 0 4 4-4 4m4-4H6a6 6 0 0 0 0 12h4" /></svg>
+        </button>
+        <button class="btn" id="preview">Vista previa</button>
+        <div class="export-wrap">
+          <button class="btn btn-primary" id="export-open" aria-expanded="false" aria-controls="export-pop">Exportar</button>
+          <div class="popover" id="export-pop" hidden>
+            <p class="pop-title">Exportar PNG</p>
+            <p class="label">Tamaño</p>
+            <div class="segmented" id="export-size" role="radiogroup" aria-label="Tamaño">
+              <button role="radio" data-v="2048" aria-checked="false">2K</button>
+              <button role="radio" data-v="4096" aria-checked="true">4K</button>
+              <button role="radio" data-v="8192" aria-checked="false">8K</button>
+            </div>
+            <label class="check"><input type="checkbox" id="export-transparent" checked /> Fondo transparente</label>
+            <label class="check"><input type="checkbox" id="export-shadow" checked /> Incluir sombra</label>
+            <p class="hint">El PNG se recorta al contorno del Duo, con la cámara que ves en el lienzo.</p>
+            <button class="btn btn-primary wide" id="export-go">Descargar PNG</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <aside class="panel left" aria-label="Pantallas">
+      <h2>Pantallas</h2>
+      <p class="sub" id="screens-intro">Cada pose lleva una imagen por orientación. Arrastrala sobre su lugar.</p>
+      <div class="grid" id="grid"></div>
+      <p class="sub small" id="grid-hint">Hacé clic en un lugar para verlo en el lienzo.</p>
+      <div class="block" id="fit-block">
+        <p class="label">Si la imagen no encaja</p>
+        <div class="segmented" id="fit" role="radiogroup" aria-label="Si la imagen no encaja">
+          <button role="radio" data-v="cover" aria-checked="true">Recortar</button>
+          <button role="radio" data-v="contain" aria-checked="false">Mostrar entera</button>
+        </div>
+      </div>
+      <div class="block">
+        <label class="row-toggle"><span>Mostrar cámara y pliegue</span><input type="checkbox" role="switch" id="guides" class="switch" /></label>
+        <p class="sub small">Así ves qué partes de tu pantalla quedan tapadas.</p>
+      </div>
+      <div class="distribute" id="distribute" hidden></div>
+      <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden />
+      <input type="file" id="files" accept="image/png,image/jpeg,image/webp" multiple hidden />
+    </aside>
+
+    <main class="stage" id="stage">
+      <div class="canvas-host" id="canvas-host"></div>
+      <div class="glass orientation" id="orientation" role="radiogroup" aria-label="Orientación">
+        <button role="radio" data-v="vertical" aria-checked="false"><i class="ori v"></i>Vertical</button>
+        <button role="radio" data-v="horizontal" aria-checked="true"><i class="ori h"></i>Horizontal</button>
+      </div>
+      <button class="glass round fullscreen" id="fullscreen" aria-label="Pantalla completa" title="Pantalla completa">
+        <svg viewBox="0 0 16 16" aria-hidden="true" id="fs-icon"><path d="M0 5V0h5M11 0h5v5M16 11v5h-5M5 16H0v-5" /></svg>
+      </button>
+      <div class="dropzone" id="dropzone" hidden><span id="dropzone-label">Soltá para</span></div>
+      <div class="glass dial" id="dial">
+        <svg viewBox="0 0 500 226" id="dial-svg" aria-hidden="true"></svg>
+        <div class="dial-readout"><span id="dial-value">180°</span><small>Ángulo de bisagra</small></div>
+        <input type="range" min="0" max="180" step="1" id="dial-input" class="sr-only" aria-label="Ángulo de bisagra" />
+        <button class="detent" data-a="0" style="left:52px;top:184px">Cerrado</button>
+        <button class="detent" data-a="90" style="left:250px;top:22px;transform:translateX(-50%)">Semiabierto</button>
+        <button class="detent" data-a="180" style="right:52px;top:184px">Abierto</button>
+      </div>
+      <p class="toast" id="toast" role="status" aria-live="polite"></p>
+    </main>
+
+    <aside class="panel right" aria-label="Ajustes">
+      <section>
+        <p class="label">Bisagra</p>
+        <div class="field">
+          <input id="angle" type="number" min="0" max="180" step="1" inputmode="numeric" aria-label="Ángulo de bisagra en grados" />
+          <span class="unit">°</span>
+          <button class="step" id="angle-minus" aria-label="Restar 1°">−</button>
+          <button class="step" id="angle-plus" aria-label="Sumar 1°">+</button>
+        </div>
+      </section>
+      <section>
+        <p class="label">Cámara</p>
+        <div class="presets" id="presets">
+          <button data-p="frente">Frente</button>
+          <button data-p="tres">Tres cuartos</button>
+          <button data-p="perfil">Perfil</button>
+          <button data-p="cenital">Cenital</button>
+        </div>
+        <label class="slider"><span>Giro</span><output id="az-out">0°</output><input type="range" id="az" min="-180" max="180" step="1" /></label>
+        <label class="slider"><span>Inclinación</span><output id="el-out">0°</output><input type="range" id="el" min="-10" max="85" step="1" /></label>
+        <p class="sub small">También podés arrastrar el Duo con el mouse y acercarte con la rueda.</p>
+      </section>
+      <section>
+        <p class="label">Acabado</p>
+        <div class="swatches" id="finish" role="radiogroup" aria-label="Acabado"></div>
+        <p class="sub" id="finish-name"></p>
+      </section>
+      <section>
+        <p class="label">Fondo</p>
+        <div class="swatches square" id="background" role="radiogroup" aria-label="Fondo del lienzo"></div>
+        <p class="sub" id="bg-name"></p>
+      </section>
+      <section>
+        <p class="label">Sombra y vidrio</p>
+        <label class="slider"><span>Suavidad de la sombra</span><output id="soft-out">60 %</output><input type="range" id="soft" min="0" max="100" step="1" /></label>
+        <label class="row-toggle"><span>Reflejos en el vidrio</span><input type="checkbox" role="switch" id="reflections" class="switch" checked /></label>
+      </section>
+    </aside>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

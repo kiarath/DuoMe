@@ -1,0 +1,20 @@
+{
+  "name": "duome",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mockups 3D del iPhone Duo en sus posiciones cerrado, semiabierto y abierto, con exportación PNG sin fondo.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.170.0",
+    "typescript": "^5.6.3",
+    "vite": "^5.4.11"
+  }
+}
