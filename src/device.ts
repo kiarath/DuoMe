@@ -155,12 +155,15 @@ export class DuoModel {
   orientationQuaternion(pose: Pose, ori: Orientation): THREE.Quaternion {
     const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
     const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-    if (pose === 'cerrado') return ori === 'horizontal' ? qz : new THREE.Quaternion();
-    if (pose === 'abierto') return ori === 'vertical' ? qz : new THREE.Quaternion();
-    return ori === 'horizontal' ? qx.multiply(qz) : new THREE.Quaternion(); // apoyado como laptop o parado como libro
+    void pose;
+    // Vertical: parado, con la bisagra vertical. Horizontal: apoyado, con la mitad de abajo sobre la mesa.
+    // La sujeción no cambia con el ángulo, así mover la bisagra nunca gira el Duo.
+    return ori === 'horizontal' ? qx.multiply(qz) : new THREE.Quaternion();
   }
 
+  ori: Orientation = 'vertical';
   setOrientation(pose: Pose, ori: Orientation, instant = false) {
+    this.ori = ori;
     this.targetQ.copy(this.orientationQuaternion(pose, ori));
     if (instant) this.root.quaternion.copy(this.targetQ);
   }
@@ -200,6 +203,7 @@ export class DuoModel {
 
   /** Dirección hacia donde "mira" el Duo, para los encuadres de cámara. */
   frontDirection(): THREE.Vector3 {
+    if (this.ori === 'horizontal') return new THREE.Vector3(0, 0, 1);
     const n = this.angle <= 15 ? new THREE.Vector3(0, 0, 1)
       : new THREE.Vector3(0, 0, 1).add(new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), -THREE.MathUtils.degToRad(180 - this.angle))).normalize();
     if (n.lengthSq() < 1e-6) n.set(0, 0, 1);

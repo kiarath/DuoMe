@@ -39,7 +39,7 @@ export const POSE_ANGLE: Record<Pose, number> = { cerrado: 0, semiabierto: 90, a
 export function slotDisplay(key: SlotKey): { display: 'outer' | 'inner'; rotated: boolean } {
   const [pose, ori] = key.split('|') as [Pose, Orientation];
   if (pose === 'cerrado') return { display: 'outer', rotated: ori === 'horizontal' };
-  if (pose === 'abierto') return { display: 'inner', rotated: ori === 'vertical' };
+  if (pose === 'abierto') return { display: 'inner', rotated: ori === 'horizontal' };
   return { display: 'inner', rotated: ori === 'horizontal' };
 }
 

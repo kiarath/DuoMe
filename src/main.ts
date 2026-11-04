@@ -10,7 +10,7 @@ import {
 // ---------- Estado ----------
 interface Img { el: HTMLImageElement; name: string; w: number; h: number }
 interface State {
-  angle: number; ori: Orientation; fit: Fit; guides: boolean; finish: string; bg: string; soft: number; reflections: boolean;
+  angle: number; ori: Orientation; fit: Fit; guides: boolean; finish: string; bg: string; bgImage?: string; soft: number; shadow: boolean; reflections: boolean;
   slots: Partial<Record<SlotKey, string>>; dismissed: string[];
 }
 const BACKGROUNDS: Record<string, { label: string; color: string | null }> = {
@@ -20,7 +20,7 @@ const BACKGROUNDS: Record<string, { label: string; color: string | null }> = {
   grafito: { label: 'Grafito', color: '#20252B' },
 };
 const images = new Map<string, Img>();
-let state: State = { angle: 90, ori: 'vertical', fit: 'cover', guides: false, finish: 'natural', bg: 'estudio', soft: 60, reflections: true, slots: {}, dismissed: [] };
+let state: State = { angle: 90, ori: 'vertical', fit: 'cover', guides: false, finish: 'natural', bg: 'estudio', soft: 60, shadow: true, reflections: false, slots: {}, dismissed: [] };
 const past: string[] = [], future: string[] = [];
 const snapshot = () => JSON.stringify(state);
 function commit(mutate: () => void) {
@@ -50,6 +50,7 @@ function updateScene(instant = false) {
   stage.duo.setFinish(state.finish);
   stage.duo.setReflections(state.reflections);
   stage.setShadow(state.soft);
+  stage.setShadowEnabled(state.shadow);
   const innerKey = key(pose === 'cerrado' ? 'abierto' : pose, state.ori);
   const outerKey = key('cerrado', state.ori);
   const ii = state.slots[innerKey] ? images.get(state.slots[innerKey]!) : undefined;
@@ -73,7 +74,7 @@ const ICON_X = '<svg viewBox="0 0 8 8" aria-hidden="true"><path d="m0 0 8 8M8 0 
 const THUMB: Record<SlotKey, [number, number, '' | 'fold-v' | 'fold-h']> = {
   'cerrado|vertical': [32, 50, ''], 'cerrado|horizontal': [50, 32, ''],
   'semiabierto|vertical': [54, 40, 'fold-v'], 'semiabierto|horizontal': [40, 54, 'fold-h'],
-  'abierto|vertical': [40, 54, 'fold-h'], 'abierto|horizontal': [54, 40, 'fold-v'],
+  'abierto|vertical': [54, 40, 'fold-v'], 'abierto|horizontal': [40, 54, 'fold-h'],
 };
 
 function renderGrid() {
@@ -104,7 +105,8 @@ function renderGrid() {
         const corner = (e.target as HTMLElement).closest('.corner');
         if (corner && img) { commit(() => { delete state.slots[k]; }); toast(`Imagen quitada de ${viewName(k)}`); return; }
         selectView(p, o);
-        if (!img || corner) { pendingSlot = k; fileInput.value = ''; fileInput.click(); }
+        // el selector de archivos solo se abre con el botón Subir
+        if (corner && !img) { pendingSlot = k; fileInput.value = ''; fileInput.click(); }
       });
       slot.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); slot.click(); } });
       wireDrop(slot, k);
@@ -231,6 +233,7 @@ function drawDial() {
     ${a > 0 ? `<path class="progress" d="M ${CX - R} ${CY} A ${R} ${R} 0 0 1 ${px} ${py}"/>` : ''}
     ${ticks}<circle class="knob" cx="${kx}" cy="${ky}" r="11"/>`;
   $('dial-value').textContent = `${Math.round(a)}°`;
+  $('dial-mini-value').textContent = `${Math.round(a)}°`;
   ($('dial-input') as HTMLInputElement).value = String(Math.round(a));
   document.querySelectorAll<HTMLElement>('.detent').forEach(b => b.setAttribute('aria-current', String(Number(b.dataset.a) === Math.round(a))));
 }
@@ -254,6 +257,19 @@ svg.addEventListener('pointerup', dialEnd); svg.addEventListener('pointercancel'
 document.querySelectorAll<HTMLElement>('.detent').forEach(b => b.addEventListener('click', () => commit(() => { state.angle = Number(b.dataset.a); })));
 $('dial-input').addEventListener('input', e => commit(() => { state.angle = Number((e.target as HTMLInputElement).value); }));
 
+// Minimizar el dial
+const dialEl = $('dial');
+const dialLift = () => (dialEl.classList.contains('min') ? 24 : 110);
+function setDialMin(min: boolean) {
+  dialEl.classList.toggle('min', min);
+  $('dial-toggle').setAttribute('aria-expanded', String(!min));
+  stage.setLift(app.classList.contains('clean') ? 0 : dialLift());
+  try { localStorage.setItem('duome-dial-min', min ? '1' : '0'); } catch { /* sin almacenamiento */ }
+  (min ? $('dial-mini') : $('dial-toggle')).focus();
+}
+$('dial-toggle').addEventListener('click', () => setDialMin(true));
+$('dial-mini').addEventListener('click', () => setDialMin(false));
+
 // ---------- Inspector ----------
 const angleField = $<HTMLInputElement>('angle');
 angleField.addEventListener('change', () => commit(() => { state.angle = Math.min(180, Math.max(0, Math.round(Number(angleField.value) || 0))); }));
@@ -276,7 +292,8 @@ function animateView(az: number, el: number) {
   };
   requestAnimationFrame(step);
 }
-document.querySelectorAll<HTMLElement>('#presets button').forEach(b => b.addEventListener('click', () => { const [a, e] = PRESETS[b.dataset.p!]; animateView(a, e); }));
+const presetFor = (p: string): [number, number] => { const [a, e] = PRESETS[p]; return state.ori === 'horizontal' && p !== 'cenital' ? [a, e + 20] : [a, e]; };
+document.querySelectorAll<HTMLElement>('#presets button').forEach(b => b.addEventListener('click', () => animateView(...presetFor(b.dataset.p!))));
 const az = $<HTMLInputElement>('az'), el = $<HTMLInputElement>('el');
 const onSlider = () => { animating++; stage.setView(Number(az.value), Number(el.value)); };
 az.addEventListener('input', onSlider); el.addEventListener('input', onSlider);
@@ -285,7 +302,7 @@ function syncCamera() {
   az.value = String(v.azimuth); el.value = String(v.elevation);
   $('az-out').textContent = `${v.azimuth}°`.replace('-', '−'); $('el-out').textContent = `${v.elevation}°`.replace('-', '−');
   document.querySelectorAll<HTMLElement>('#presets button').forEach(b => {
-    const [a, e] = PRESETS[b.dataset.p!]; b.setAttribute('aria-pressed', String(Math.abs(a - v.azimuth) <= 2 && Math.abs(e - v.elevation) <= 2));
+    const [a, e] = presetFor(b.dataset.p!); b.setAttribute('aria-pressed', String(Math.abs(a - v.azimuth) <= 2 && Math.abs(e - v.elevation) <= 2));
   });
 }
 stage.onCameraChange = syncCamera;
@@ -302,13 +319,37 @@ function swatches(host: HTMLElement, items: Record<string, { label: string; swat
   return () => host.querySelectorAll<HTMLElement>('button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.k === get())));
 }
 const syncFinish = swatches($('finish'), FINISHES, () => state.finish, k => { state.finish = k; });
-const syncBg = swatches($('background'), BACKGROUNDS, () => state.bg, k => { state.bg = k; });
+const syncBgBase = swatches($('background'), BACKGROUNDS, () => state.bg, k => { state.bg = k; });
+const bgHost = $('background');
+const bgUpload = document.createElement('button');
+bgUpload.className = 'bg-upload'; bgUpload.setAttribute('aria-label', 'Subir fondo'); bgUpload.title = 'Subir fondo';
+bgUpload.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1v10M1 6h10"/></svg>';
+const bgCustom = document.createElement('button');
+bgCustom.setAttribute('role', 'radio'); bgCustom.dataset.k = 'imagen'; bgCustom.setAttribute('aria-label', 'Fondo subido'); bgCustom.title = 'Fondo subido'; bgCustom.hidden = true;
+bgCustom.addEventListener('click', () => { if (state.bgImage) commit(() => { state.bg = 'imagen'; }); });
+bgHost.append(bgCustom, bgUpload);
+const bgFile = $<HTMLInputElement>('bg-file');
+bgUpload.addEventListener('click', () => { bgFile.value = ''; bgFile.click(); });
+bgFile.addEventListener('change', async () => {
+  const f = bgFile.files?.[0]; if (!f) return;
+  const id = await addImage(f); if (!id) return;
+  commit(() => { state.bgImage = id; state.bg = 'imagen'; });
+  toast('Fondo actualizado');
+});
+function syncBg() {
+  syncBgBase();
+  const img = state.bgImage ? images.get(state.bgImage) : undefined;
+  bgCustom.hidden = !img;
+  if (img) bgCustom.style.background = `center / cover url("${img.el.src}")`;
+  bgCustom.setAttribute('aria-checked', String(state.bg === 'imagen'));
+}
 
 const soft = $<HTMLInputElement>('soft');
 let softStart: string | null = null;
 soft.addEventListener('pointerdown', () => { softStart = snapshot(); });
 soft.addEventListener('input', () => { state.soft = Number(soft.value); render(); });
 soft.addEventListener('change', () => { if (softStart) { past.push(softStart); future.length = 0; softStart = null; updateHistoryButtons(); } });
+$('shadow').addEventListener('change', e => commit(() => { state.shadow = (e.target as HTMLInputElement).checked; }));
 $('reflections').addEventListener('change', e => commit(() => { state.reflections = (e.target as HTMLInputElement).checked; }));
 $('guides').addEventListener('change', e => commit(() => { state.guides = (e.target as HTMLInputElement).checked; }));
 
@@ -324,7 +365,7 @@ function selectView(p: Pose, o: Orientation) {
   if (!changed) return;
   commit(() => { state.angle = POSE_ANGLE[p]; state.ori = o; });
   // apoyado como laptop conviene mirarlo un poco más desde arriba
-  requestAnimationFrame(() => animateView(PRESETS.tres[0], p === 'semiabierto' && o === 'horizontal' ? 26 : PRESETS.tres[1]));
+  requestAnimationFrame(() => animateView(...presetFor('tres')));
 }
 
 // ---------- Barra superior ----------
@@ -343,7 +384,7 @@ const app = $('app');
 const ENTER = 'M0 5V0h5M11 0h5v5M16 11v5h-5M5 16H0v-5', EXIT = 'M5 0v5H0M11 0v5h5M16 11h-5v5M0 11h5v5';
 function setClean(on: boolean) {
   app.classList.toggle('clean', on);
-  stage.setLift(on ? 0 : 110);
+  stage.setLift(on ? 0 : dialLift());
   $('fs-icon').innerHTML = `<path d="${on ? EXIT : ENTER}"/>`;
   $('fullscreen').setAttribute('aria-label', on ? 'Salir de pantalla completa' : 'Pantalla completa');
   $('fullscreen').title = on ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa';
@@ -369,12 +410,14 @@ $('export-go').addEventListener('click', async () => {
   const longSide = Math.min(exportSize, max);
   const btn = $<HTMLButtonElement>('export-go'); btn.disabled = true; btn.textContent = 'Generando…';
   try {
-    const blob = await stage.exportPNG({
+    const transparent = $<HTMLInputElement>('export-transparent').checked;
+    let blob = await stage.exportPNG({
       longSide,
-      transparent: $<HTMLInputElement>('export-transparent').checked,
-      shadow: $<HTMLInputElement>('export-shadow').checked,
-      background: resolveColor(BACKGROUNDS[state.bg].color ?? 'var(--estudio)'),
+      transparent: transparent || state.bg === 'imagen',
+      shadow: state.shadow && $<HTMLInputElement>('export-shadow').checked,
+      background: resolveColor(BACKGROUNDS[state.bg]?.color ?? 'var(--estudio)'),
     });
+    if (!transparent && state.bg === 'imagen' && state.bgImage) blob = await composeOver(blob, images.get(state.bgImage)!.el);
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     a.download = `duome-${currentKey().replace('|', '-')}-${longSide}px.png`;
@@ -384,6 +427,17 @@ $('export-go').addEventListener('click', async () => {
   } catch { toast('No se pudo generar el PNG. Probá con un tamaño menor.'); }
   btn.disabled = false; btn.textContent = 'Descargar PNG';
 });
+
+/** Pone el render del Duo sobre el fondo subido, recortando el fondo para llenar el PNG. */
+async function composeOver(png: Blob, bg: HTMLImageElement): Promise<Blob> {
+  const fg = await createImageBitmap(png);
+  const c = document.createElement('canvas'); c.width = fg.width; c.height = fg.height;
+  const ctx = c.getContext('2d')!;
+  const s = Math.max(c.width / bg.naturalWidth, c.height / bg.naturalHeight);
+  ctx.drawImage(bg, (c.width - bg.naturalWidth * s) / 2, (c.height - bg.naturalHeight * s) / 2, bg.naturalWidth * s, bg.naturalHeight * s);
+  ctx.drawImage(fg, 0, 0);
+  return new Promise((res, rej) => c.toBlob(b => (b ? res(b) : rej(new Error('PNG'))), 'image/png'));
+}
 
 function resolveColor(c: string) {
   const m = c.match(/^var\((--[\w-]+)\)$/);
@@ -408,9 +462,16 @@ function render(instant = false) {
   ($('reflections') as HTMLInputElement).checked = state.reflections;
   soft.value = String(state.soft); $('soft-out').textContent = `${state.soft} %`;
   $('finish-name').textContent = FINISHES[state.finish].label;
-  $('bg-name').textContent = BACKGROUNDS[state.bg].label;
-  const bg = BACKGROUNDS[state.bg].color;
-  stageEl.classList.toggle('transparent', !bg);
+  $('bg-name').textContent = state.bg === 'imagen' ? 'Fondo subido' : BACKGROUNDS[state.bg].label;
+  const bg = state.bg === 'imagen' ? null : BACKGROUNDS[state.bg].color;
+  const bgImg = state.bg === 'imagen' && state.bgImage ? images.get(state.bgImage) : undefined;
+  stageEl.style.backgroundImage = bgImg ? `url("${bgImg.el.src}")` : '';
+  stageEl.classList.toggle('has-image', !!bgImg);
+  ($('shadow') as HTMLInputElement).checked = state.shadow;
+  soft.disabled = !state.shadow;
+  ($('export-shadow') as HTMLInputElement).checked = state.shadow;
+  ($('export-shadow') as HTMLInputElement).disabled = !state.shadow;
+  stageEl.classList.toggle('transparent', !bg && !bgImg);
   if (bg) stageEl.style.setProperty('--canvas-bg', bg); else stageEl.style.removeProperty('--canvas-bg');
   const empty = !Object.keys(state.slots).length;
   $('screens-intro').textContent = empty ? 'Cada pose lleva una imagen por orientación. Arrastrala sobre su lugar o hacé clic para elegirla.' : 'Cada pose lleva una imagen por orientación. Arrastrala sobre su lugar.';
@@ -420,5 +481,6 @@ function render(instant = false) {
 }
 
 render(true);
+try { if (localStorage.getItem('duome-dial-min') === '1') { dialEl.classList.add('min'); $('dial-toggle').setAttribute('aria-expanded', 'false'); stage.setLift(dialLift()); } } catch { /* sin almacenamiento */ }
 stage.setView(...PRESETS.tres, 900);
 syncCamera();

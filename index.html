@@ -60,6 +60,7 @@
       <div class="distribute" id="distribute" hidden></div>
       <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden />
       <input type="file" id="files" accept="image/png,image/jpeg,image/webp" multiple hidden />
+      <input type="file" id="bg-file" accept="image/png,image/jpeg,image/webp" hidden />
     </aside>
 
     <main class="stage" id="stage">
@@ -76,9 +77,14 @@
         <svg viewBox="0 0 500 226" id="dial-svg" aria-hidden="true"></svg>
         <div class="dial-readout"><span id="dial-value">180°</span><small>Ángulo de bisagra</small></div>
         <input type="range" min="0" max="180" step="1" id="dial-input" class="sr-only" aria-label="Ángulo de bisagra" />
-        <button class="detent" data-a="0" style="left:52px;top:184px">Cerrado</button>
-        <button class="detent" data-a="90" style="left:250px;top:22px;transform:translateX(-50%)">Semiabierto</button>
-        <button class="detent" data-a="180" style="right:52px;top:184px">Abierto</button>
+        <button class="detent" data-a="0">Cerrado</button>
+        <button class="detent" data-a="90">Semiabierto</button>
+        <button class="detent" data-a="180">Abierto</button>
+        <button class="dial-toggle" id="dial-toggle" aria-label="Minimizar bisagra" aria-expanded="true" title="Minimizar">
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4.5 6 8.5l4-4" /></svg>
+        </button>
+        <button class="dial-mini" id="dial-mini" aria-label="Mostrar control de bisagra"><span>Bisagra</span><b id="dial-mini-value">90°</b>
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 7.5 6 3.5l4 4" /></svg></button>
       </div>
       <p class="toast" id="toast" role="status" aria-live="polite"></p>
     </main>
@@ -117,8 +123,9 @@
       </section>
       <section>
         <p class="label">Sombra y vidrio</p>
+        <label class="row-toggle spaced"><span>Sombra</span><input type="checkbox" role="switch" id="shadow" class="switch" checked /></label>
         <label class="slider"><span>Suavidad de la sombra</span><output id="soft-out">60 %</output><input type="range" id="soft" min="0" max="100" step="1" /></label>
-        <label class="row-toggle"><span>Reflejos en el vidrio</span><input type="checkbox" role="switch" id="reflections" class="switch" checked /></label>
+        <label class="row-toggle"><span>Reflejos en el vidrio</span><input type="checkbox" role="switch" id="reflections" class="switch" /></label>
       </section>
     </aside>
   </div>

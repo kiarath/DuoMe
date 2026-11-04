@@ -101,6 +101,9 @@ export class Stage {
     this.key.position.set(c.x - 120, c.y + 420, c.z + 260);
   }
 
+  shadowOn = true;
+  setShadowEnabled(on: boolean) { this.shadowOn = on; this.floor.visible = on; this.key.castShadow = on; this.dirty = true; }
+
   setShadow(softness: number) {
     // 0 = sombra marcada, 100 = muy difusa
     this.key.shadow.radius = 2 + softness * 0.3;
@@ -165,7 +168,7 @@ export class Stage {
     this.camera.clearViewOffset();
     r.setPixelRatio(prevRatio);
     r.setSize(prevSize.x, prevSize.y, false);
-    this.floor.visible = true;
+    this.floor.visible = this.shadowOn;
     this.resize();
     return blob;
   }

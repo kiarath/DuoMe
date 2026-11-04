@@ -173,11 +173,30 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: var(--foc
 .dial .tick.on { stroke: var(--cianotipo); stroke-opacity: .9; }
 .dial .knob { fill: var(--card); stroke: var(--cianotipo); stroke-width: 3; cursor: grab; }
 .dial .hit { fill: transparent; stroke: transparent; stroke-width: 44; cursor: pointer; }
-.dial-readout { position: absolute; left: 0; right: 0; top: 104px; text-align: center; pointer-events: none; }
+.dial-readout { position: absolute; left: 0; right: 0; top: 110px; text-align: center; pointer-events: none; }
 .dial-readout span { display: block; font: 400 48px/1 'Encode Sans Expanded', sans-serif; }
 .dial-readout small { display: block; margin-top: 8px; color: var(--lapiz); font-size: 13px; }
-.detent { position: absolute; border: 0; background: transparent; color: var(--lapiz); font-size: 13px; padding: 2px 4px; border-radius: 4px; }
-.detent[data-a='0'] { transform: translateX(-100%); }
+/* Las etiquetas se ubican con la misma geometría del SVG (500 x 226, centro 250,196, radio 132) */
+.detent { position: absolute; border: 0; background: transparent; color: var(--lapiz); font-size: 13px; line-height: 18px; padding: 2px 6px; border-radius: 4px; white-space: nowrap; }
+.detent[data-a='0'] { left: 86px; top: 196px; transform: translate(-100%, -50%); }
+.detent[data-a='180'] { left: 414px; top: 196px; transform: translate(0, -50%); }
+.detent[data-a='90'] { left: 250px; top: 30px; transform: translate(-50%, -50%); }
+.dial-toggle { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border-radius: 14px; border: 0; background: transparent; display: grid; place-items: center; color: var(--lapiz); }
+.dial-toggle:hover { background: var(--niebla); color: var(--grafito); }
+.dial-toggle svg, .dial-mini svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; }
+.dial-mini { display: none; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 16px; border: 0; background: transparent; border-radius: 20px; }
+.dial-mini span { color: var(--lapiz); }
+.dial-mini b { font: 400 16px 'Encode Sans Expanded', sans-serif; color: var(--grafito); }
+.dial.min { width: auto; height: 40px; margin-left: 0; transform: translateX(-50%); border-radius: 20px; }
+.dial.min > :not(.dial-mini) { display: none; }
+.dial.min .dial-mini { display: flex; }
+.row-toggle.spaced { margin-bottom: 16px; }
+.stage.has-image { background-size: cover; background-position: center; }
+.bg-upload { width: 28px; height: 28px; border-radius: 7px; border: 1px dashed var(--control); background: transparent; display: grid; place-items: center; padding: 0; color: var(--grafito); }
+.bg-upload svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.bg-upload:hover { background: var(--niebla); }
+.swatches button[hidden] { display: none; }
+.slider input:disabled { opacity: .4; }
 .detent[aria-current='true'] { color: var(--cianotipo); font-weight: 600; }
 .dial:focus-within { box-shadow: var(--shadow), var(--focus); }
 .dropzone[hidden], .distribute[hidden], .popover[hidden], .block[hidden] { display: none; }
@@ -195,7 +214,7 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: var(--foc
   .app { grid-template-rows: 56px minmax(420px, 60vh) auto auto; grid-template-columns: 1fr; grid-template-areas: 'top' 'stage' 'left' 'right'; height: auto; }
   .app.clean { grid-template-rows: 0 100vh 0 0; grid-template-columns: 1fr; }
   .panel { overflow: visible; border: 0 !important; border-top: 1px solid var(--trazo) !important; }
-  .dial { transform: scale(.72); transform-origin: 50% 100%; bottom: 12px; }
+  .dial:not(.min) { transform: scale(.72); transform-origin: 50% 100%; bottom: 12px; }
   .distribute { position: fixed; inset: 56px 0 0 0; width: auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
