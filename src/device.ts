@@ -9,11 +9,11 @@ import { DUO, HALF_W, HINGE_GAP, INNER_MM, OUTER_MM, type Orientation, type Pose
  *   como en las fotos oficiales. Abierto y visto de atrás: cámaras a la izquierda, pantalla exterior a la derecha.
  */
 const R_OUT = 12; // esquinas exteriores del cuerpo
-const R_HINGE = 10; // esquinas del lado de la bisagra con el Duo plegado: redondeadas, como en las fotos del Duo cerrado
-const R_HINGE_OPEN = 2.2; // abierto, las dos mitades forman una sola placa
-const FOLD_SWAP = 60; // por debajo de este ángulo se usan las esquinas redondeadas
-const R_SCREEN = 9; // esquinas de las pantallas
-const BEVEL = 0.6; // chaflán pulido del marco
+const R_HINGE = 1.5; // esquinas del lado de la bisagra: rectas, abierto las dos mitades forman una sola placa
+const R_SCREEN = 9.5; // esquinas de las pantallas del lado redondeado
+const R_SCREEN_HINGE = 1.2; // esquinas de la pantalla exterior junto a la bisagra
+const EDGE_SIZE = 1.5; // canto redondeado del marco: cuánto entra hacia adentro
+const EDGE_DEPTH = 1.7; // y cuánto sube por cada cara
 
 /** Contorno con un radio por esquina: [arriba-izq, arriba-der, abajo-der, abajo-izq]. */
 export function roundedShape(x0: number, y0: number, x1: number, y1: number, r: [number, number, number, number]): THREE.Shape {
@@ -68,8 +68,6 @@ export class DuoModel {
   readonly outerMat = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
   readonly glareMat: THREE.MeshStandardMaterial;
   private readonly glare: THREE.Mesh[] = [];
-  private readonly variants: Record<'folded' | 'open', THREE.Object3D[]> = { folded: [], open: [] };
-  private reflections = false;
   angle = 180;
   ori: Orientation = 'vertical';
   private targetQ = new THREE.Quaternion();
@@ -91,32 +89,28 @@ export class DuoModel {
     const half = (side: 1 | -1, group: THREE.Group) => {
       const x0 = side > 0 ? 0 : -W, x1 = side > 0 ? W : 0;
       const zf = 0.02, zb = -T - 0.02;
-      for (const v of ['folded', 'open'] as const) {
-        const rh = v === 'folded' ? R_HINGE : R_HINGE_OPEN;
-        const r: [number, number, number, number] = side > 0 ? [rh, R_OUT, R_OUT, rh] : [R_OUT, rh, rh, R_OUT];
-        const add = (m: THREE.Object3D) => { group.add(m); this.variants[v].push(m); };
-        // Marco de metal con chaflán, de z = -T a z = 0
-        const geo = new THREE.ExtrudeGeometry(roundedShape(x0 + BEVEL, -H / 2 + BEVEL, x1 - BEVEL, H / 2 - BEVEL, inset(r, BEVEL)),
-          { depth: T - 2 * BEVEL, bevelEnabled: true, bevelThickness: BEVEL, bevelSize: BEVEL, bevelSegments: 3, curveSegments: 28 });
-        geo.translate(0, 0, -T + BEVEL);
-        const frame = new THREE.Mesh(geo, this.frameMat); frame.name = 'Marco'; add(frame);
-        // Frente: vidrio negro y pantalla interior (una sola imagen para las dos mitades)
-        const faceShape = roundedShape(x0 + 0.35, -H / 2 + 0.35, x1 - 0.35, H / 2 - 0.35, inset(r, 0.35));
-        const face = new THREE.Mesh(new THREE.ShapeGeometry(faceShape, 28), glassMat); face.position.z = zf; add(face);
-        const iw = INNER_MM[0] / 2, ih = INNER_MM[1];
-        const sh = v === 'folded' ? R_SCREEN : 3; // esquina de la pantalla interior junto al pliegue
-        const sr: [number, number, number, number] = side > 0 ? [sh, R_SCREEN, R_SCREEN, sh] : [R_SCREEN, sh, sh, R_SCREEN];
-        const inner = new THREE.Mesh(screenGeometry(roundedShape(side > 0 ? 0 : -iw, -ih / 2, side > 0 ? iw : 0, ih / 2, sr), -iw, iw, -ih / 2, ih / 2), this.innerMat);
-        inner.position.z = zf + 0.02; inner.name = 'Pantalla interior'; add(inner);
-        const g1 = new THREE.Mesh(face.geometry, this.glareMat); g1.position.z = zf + 0.05; add(g1); this.glare.push(g1);
-        // Dorso
-        const back = new THREE.Mesh(new THREE.ShapeGeometry(faceShape, 28), side < 0 ? glassMat : this.backMat); back.position.z = zb; add(back);
-        const g2 = new THREE.Mesh(back.geometry, this.glareMat); g2.position.z = zb - 0.05; add(g2); this.glare.push(g2);
-      }
+      const r: [number, number, number, number] = side > 0 ? [R_HINGE, R_OUT, R_OUT, R_HINGE] : [R_OUT, R_HINGE, R_HINGE, R_OUT];
+      // Marco de metal con el canto redondeado, de z = -T a z = 0
+      const geo = new THREE.ExtrudeGeometry(roundedShape(x0 + EDGE_SIZE, -H / 2 + EDGE_SIZE, x1 - EDGE_SIZE, H / 2 - EDGE_SIZE, inset(r, EDGE_SIZE)),
+        { depth: T - 2 * EDGE_DEPTH, bevelEnabled: true, bevelThickness: EDGE_DEPTH, bevelSize: EDGE_SIZE, bevelSegments: 8, curveSegments: 32 });
+      geo.translate(0, 0, -T + EDGE_DEPTH);
+      const frame = new THREE.Mesh(geo, this.frameMat); frame.name = 'Marco'; group.add(frame);
+      // Frente: vidrio negro y pantalla interior (una sola imagen para las dos mitades)
+      const faceShape = roundedShape(x0 + 0.35, -H / 2 + 0.35, x1 - 0.35, H / 2 - 0.35, inset(r, 0.35));
+      const face = new THREE.Mesh(new THREE.ShapeGeometry(faceShape, 32), glassMat); face.position.z = zf; group.add(face);
+      const iw = INNER_MM[0] / 2, ih = INNER_MM[1];
+      // Abierta, la pantalla interior es una sola: sin esquinas en el pliegue
+      const sr: [number, number, number, number] = side > 0 ? [0, R_SCREEN, R_SCREEN, 0] : [R_SCREEN, 0, 0, R_SCREEN];
+      const inner = new THREE.Mesh(screenGeometry(roundedShape(side > 0 ? 0 : -iw, -ih / 2, side > 0 ? iw : 0, ih / 2, sr), -iw, iw, -ih / 2, ih / 2), this.innerMat);
+      inner.position.z = zf + 0.02; inner.name = 'Pantalla interior'; group.add(inner);
+      const g1 = new THREE.Mesh(face.geometry, this.glareMat); g1.position.z = zf + 0.05; group.add(g1); this.glare.push(g1);
+      // Dorso
+      const back = new THREE.Mesh(new THREE.ShapeGeometry(faceShape, 32), side < 0 ? glassMat : this.backMat); back.position.z = zb; group.add(back);
+      const g2 = new THREE.Mesh(back.geometry, this.glareMat); g2.position.z = zb - 0.05; group.add(g2); this.glare.push(g2);
       if (side < 0) {
         // Pantalla exterior en la mitad que gira; vista desde afuera, +x queda a la izquierda, por eso la U va espejada
         const ow = OUTER_MM[0], oh = OUTER_MM[1], cx = -W / 2;
-        const os = new THREE.Mesh(screenGeometry(roundedShape(cx - ow / 2, -oh / 2, cx + ow / 2, oh / 2, [R_SCREEN, R_SCREEN, R_SCREEN, R_SCREEN]), cx - ow / 2, cx + ow / 2, -oh / 2, oh / 2, true), this.outerMat);
+        const os = new THREE.Mesh(screenGeometry(roundedShape(cx - ow / 2, -oh / 2, cx + ow / 2, oh / 2, [R_SCREEN, R_SCREEN_HINGE, R_SCREEN_HINGE, R_SCREEN]), cx - ow / 2, cx + ow / 2, -oh / 2, oh / 2, true), this.outerMat);
         os.position.z = zb - 0.02; os.name = 'Pantalla exterior'; group.add(os);
         // Cámara frontal exterior: perforación arriba, en la esquina lejos de la bisagra
         const hole = new THREE.Mesh(new THREE.CircleGeometry(2.1, 40), new THREE.MeshBasicMaterial({ color: 0x020203, side: THREE.DoubleSide }));
@@ -155,8 +149,8 @@ export class DuoModel {
     this.pivot.position.set(0, 0, HINGE_GAP / 2);
     this.moving.position.set(0, 0, -HINGE_GAP / 2);
     this.pivot.add(this.moving);
-    // Lomo de la bisagra, visible con el Duo cerrado
-    this.spine = new THREE.Mesh(new THREE.CapsuleGeometry(DUO.thickFolded / 2 - 0.05, H - DUO.thickFolded - 2, 12, 40), this.frameMat);
+    // Lomo de la bisagra, visible con el Duo cerrado: canto recto de arriba abajo, esquinas sin redondear
+    this.spine = new THREE.Mesh(new THREE.CylinderGeometry(DUO.thickFolded / 2 - 0.05, DUO.thickFolded / 2 - 0.05, H - 1, 48), this.frameMat);
     this.spine.position.set(DUO.thickFolded / 2 - (DUO.widthFolded - HALF_W), 0, HINGE_GAP / 2);
     this.body.add(this.fixed, this.pivot, this.spine);
     this.root.add(this.body);
@@ -170,22 +164,13 @@ export class DuoModel {
     this.backMat.color.set(f.back); this.islandMat.color.set(f.island); this.ringMat.color.set(f.ring);
   }
 
-  setReflections(on: boolean) { this.reflections = on; this.applyVariant(); }
-
-  /** Plegado, las esquinas junto a la bisagra son redondeadas; abierto, casi rectas para que las mitades formen una placa. */
-  private applyVariant() {
-    const active = this.angle < FOLD_SWAP ? 'folded' : 'open';
-    for (const v of ['folded', 'open'] as const) for (const o of this.variants[v]) {
-      o.visible = v === active && (!this.glare.includes(o as THREE.Mesh) || this.reflections);
-    }
-  }
+  setReflections(on: boolean) { for (const g of this.glare) g.visible = on; }
 
   /** Ángulo de la bisagra en grados: 0 cerrado, 180 abierto. */
   setAngle(deg: number) {
     this.angle = THREE.MathUtils.clamp(deg, 0, 180);
     this.pivot.rotation.y = THREE.MathUtils.degToRad(180 - this.angle);
     this.spine.visible = this.angle < 28;
-    this.applyVariant();
     this.recenter();
   }
 
