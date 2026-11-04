@@ -1,13 +1,19 @@
 import * as THREE from 'three';
 import { DUO, HALF_W, HINGE_GAP, INNER_MM, OUTER_MM, type Orientation, type Pose } from './specs';
 
-/** Radios de esquina estimados a partir de las fotos oficiales (mm). */
-const R_OUT = 11.5; // esquinas exteriores del cuerpo
-const R_HINGE = 2.4; // esquinas del lado de la bisagra
-const R_SCREEN = 8.6; // esquinas de las pantallas
-const BEVEL = 0.7;
+/*
+ * Cómo está armado (en milímetros, a escala 1:1):
+ * - La mitad derecha (x > 0) queda fija y lleva atrás la isla de cámaras, arriba en el borde exterior.
+ * - La mitad izquierda (x < 0) gira sobre la bisagra (x = 0) y lleva atrás la pantalla exterior.
+ * - Cerrado y visto de frente: la bisagra queda a la izquierda y la cámara frontal arriba a la derecha,
+ *   como en las fotos oficiales. Abierto y visto de atrás: cámaras a la izquierda, pantalla exterior a la derecha.
+ */
+const R_OUT = 12; // esquinas exteriores del cuerpo
+const R_HINGE = 2.2; // esquinas del lado de la bisagra
+const R_SCREEN = 9; // esquinas de las pantallas
+const BEVEL = 0.6; // chaflán pulido del marco
 
-/** Contorno de un rectángulo con un radio por esquina: [arriba-izq, arriba-der, abajo-der, abajo-izq]. */
+/** Contorno con un radio por esquina: [arriba-izq, arriba-der, abajo-der, abajo-izq]. */
 export function roundedShape(x0: number, y0: number, x1: number, y1: number, r: [number, number, number, number]): THREE.Shape {
   const s = new THREE.Shape();
   const [tl, tr, br, bl] = r;
@@ -22,8 +28,9 @@ export function roundedShape(x0: number, y0: number, x1: number, y1: number, r: 
   if (bl) s.absarc(x0 + bl, y0 + bl, bl, Math.PI, Math.PI * 1.5, false);
   return s;
 }
+const inset = (r: [number, number, number, number], d: number) => r.map(v => Math.max(0.1, v - d)) as [number, number, number, number];
 
-/** Geometría plana con UV normalizadas al rectángulo [ux0..ux1] x [vy0..vy1]. */
+/** Geometría plana con UV normalizadas al rectángulo de la pantalla. */
 function screenGeometry(shape: THREE.Shape, ux0: number, ux1: number, vy0: number, vy1: number, mirrorU = false): THREE.ShapeGeometry {
   const g = new THREE.ShapeGeometry(shape, 24);
   const pos = g.attributes.position as THREE.BufferAttribute;
@@ -37,108 +44,121 @@ function screenGeometry(shape: THREE.Shape, ux0: number, ux1: number, vy0: numbe
   return g;
 }
 
-export interface Finish { frame: string; back: string; island: string }
-export const FINISHES: Record<string, Finish & { label: string; swatch: string }> = {
-  natural: { label: 'Titanio natural', swatch: '#B9B4AB', frame: '#bdb7ad', back: '#c9c4bb', island: '#b3ada3' },
-  grafito: { label: 'Grafito', swatch: '#3A3C40', frame: '#4a4c51', back: '#3b3d42', island: '#45474c' },
-  blanco: { label: 'Blanco', swatch: '#E6E3DD', frame: '#dcd8d1', back: '#ece9e3', island: '#dfdbd4' },
-  niebla: { label: 'Azul niebla', swatch: '#8E9DB0', frame: '#8f9cad', back: '#a3afbf', island: '#97a3b3' },
+export interface Finish { swatch: string; frame: string; frameRough: number; back: string; island: string; ring: string }
+/** Los dos acabados del iPhone Duo. */
+export const FINISHES: Record<string, Finish> = {
+  nocturno: { swatch: '#2B3442', frame: '#56617a', frameRough: 0.18, back: '#2d3645', island: '#343e4e', ring: '#5d6880' },
+  estelar: { swatch: '#EDEDEB', frame: '#e4e6e9', frameRough: 0.12, back: '#efefed', island: '#f4f4f2', ring: '#d9dbde' },
 };
 
 export class DuoModel {
-  readonly root = new THREE.Group(); // orientación (rol / apoyo)
+  readonly root = new THREE.Group(); // sujeción (parado o apoyado)
   private readonly body = new THREE.Group(); // recentrado
-  private readonly left = new THREE.Group(); // mitad fija
+  private readonly fixed = new THREE.Group(); // mitad derecha, fija
   private readonly pivot = new THREE.Group(); // eje de la bisagra
-  private readonly right = new THREE.Group(); // mitad que gira
+  private readonly moving = new THREE.Group(); // mitad izquierda, gira
   private readonly spine: THREE.Mesh;
   readonly frameMat: THREE.MeshPhysicalMaterial;
   readonly backMat: THREE.MeshPhysicalMaterial;
   readonly islandMat: THREE.MeshPhysicalMaterial;
+  readonly ringMat: THREE.MeshPhysicalMaterial;
   readonly innerMat = new THREE.MeshBasicMaterial({ toneMapped: false });
   readonly outerMat = new THREE.MeshBasicMaterial({ toneMapped: false, side: THREE.DoubleSide });
   readonly glareMat: THREE.MeshStandardMaterial;
   private readonly glare: THREE.Mesh[] = [];
   angle = 180;
+  ori: Orientation = 'vertical';
   private targetQ = new THREE.Quaternion();
 
   constructor() {
-    this.frameMat = new THREE.MeshPhysicalMaterial({ color: FINISHES.natural.frame, metalness: 1, roughness: 0.32, clearcoat: 0.3, clearcoatRoughness: 0.4 });
-    this.backMat = new THREE.MeshPhysicalMaterial({ color: FINISHES.natural.back, metalness: 0.15, roughness: 0.45, clearcoat: 1, clearcoatRoughness: 0.12, side: THREE.DoubleSide });
-    this.islandMat = new THREE.MeshPhysicalMaterial({ color: FINISHES.natural.island, metalness: 0.6, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.05 });
-    // Reflejo sobre el vidrio: material negro con mezcla aditiva, solo suma los brillos del entorno.
+    const f = FINISHES.nocturno;
+    this.frameMat = new THREE.MeshPhysicalMaterial({ color: f.frame, metalness: 1, roughness: f.frameRough, clearcoat: 0.6, clearcoatRoughness: 0.08 });
+    // vidrio trasero esmerilado
+    this.backMat = new THREE.MeshPhysicalMaterial({ color: f.back, metalness: 0, roughness: 0.62, clearcoat: 0.25, clearcoatRoughness: 0.5, side: THREE.DoubleSide });
+    this.islandMat = new THREE.MeshPhysicalMaterial({ color: f.island, metalness: 0, roughness: 0.4, clearcoat: 0.6, clearcoatRoughness: 0.2 });
+    this.ringMat = new THREE.MeshPhysicalMaterial({ color: f.ring, metalness: 1, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
+    // brillo sobre el vidrio: negro con mezcla aditiva, suma solo los reflejos del entorno
     this.glareMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.06, metalness: 0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, envMapIntensity: 0.9, side: THREE.DoubleSide });
-    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x0b0c0e, metalness: 0, roughness: 0.15, clearcoat: 1, side: THREE.DoubleSide });
+    const glassMat = new THREE.MeshPhysicalMaterial({ color: 0x07080a, metalness: 0, roughness: 0.12, clearcoat: 1, side: THREE.DoubleSide });
+    const lensGlass = new THREE.MeshPhysicalMaterial({ color: 0x05070a, roughness: 0.04, clearcoat: 1, clearcoatRoughness: 0.02, side: THREE.DoubleSide });
+    const lensIris = new THREE.MeshPhysicalMaterial({ color: 0x1a2230, metalness: 0.4, roughness: 0.2, side: THREE.DoubleSide });
 
     const H = DUO.height, T = DUO.thickOpen, W = HALF_W;
     const half = (side: 1 | -1, group: THREE.Group) => {
-      // Cuerpo: contorno con bisel, de z = -T a z = 0
       const x0 = side > 0 ? 0 : -W, x1 = side > 0 ? W : 0;
       const r: [number, number, number, number] = side > 0 ? [R_HINGE, R_OUT, R_OUT, R_HINGE] : [R_OUT, R_HINGE, R_HINGE, R_OUT];
-      const inner = roundedShape(x0 + BEVEL, -H / 2 + BEVEL, x1 - BEVEL, H / 2 - BEVEL, r.map(v => Math.max(0.1, v - BEVEL)) as typeof r);
-      const geo = new THREE.ExtrudeGeometry(inner, { depth: T - 2 * BEVEL, bevelEnabled: true, bevelThickness: BEVEL, bevelSize: BEVEL, bevelSegments: 4, curveSegments: 24 });
+      // Marco de metal con chaflán, de z = -T a z = 0
+      const geo = new THREE.ExtrudeGeometry(roundedShape(x0 + BEVEL, -H / 2 + BEVEL, x1 - BEVEL, H / 2 - BEVEL, inset(r, BEVEL)),
+        { depth: T - 2 * BEVEL, bevelEnabled: true, bevelThickness: BEVEL, bevelSize: BEVEL, bevelSegments: 3, curveSegments: 28 });
       geo.translate(0, 0, -T + BEVEL);
-      const bodyMesh = new THREE.Mesh(geo, this.frameMat); bodyMesh.castShadow = true; bodyMesh.name = 'Marco';
-      group.add(bodyMesh);
-      const z0 = 0.02, zb = -T - 0.02;
-      // Cara interior: vidrio negro y pantalla interior (la imagen atraviesa las dos mitades)
-      const face = new THREE.Mesh(new THREE.ShapeGeometry(roundedShape(x0 + 0.4, -H / 2 + 0.4, x1 - 0.4, H / 2 - 0.4, r.map(v => Math.max(0.1, v - 0.4)) as typeof r), 24), glassMat);
-      face.position.z = z0; group.add(face);
+      const frame = new THREE.Mesh(geo, this.frameMat); frame.name = 'Marco'; group.add(frame);
+      const zf = 0.02, zb = -T - 0.02;
+      // Frente: vidrio negro y pantalla interior (una sola imagen para las dos mitades)
+      const faceShape = roundedShape(x0 + 0.35, -H / 2 + 0.35, x1 - 0.35, H / 2 - 0.35, inset(r, 0.35));
+      const face = new THREE.Mesh(new THREE.ShapeGeometry(faceShape, 28), glassMat); face.position.z = zf; group.add(face);
       const iw = INNER_MM[0] / 2, ih = INNER_MM[1];
-      const sx0 = side > 0 ? 0 : -iw, sx1 = side > 0 ? iw : 0;
       const sr: [number, number, number, number] = side > 0 ? [0, R_SCREEN, R_SCREEN, 0] : [R_SCREEN, 0, 0, R_SCREEN];
-      const scr = new THREE.Mesh(screenGeometry(roundedShape(sx0, -ih / 2, sx1, ih / 2, sr), -iw, iw, -ih / 2, ih / 2), this.innerMat);
-      scr.position.z = z0 + 0.02; scr.name = 'Pantalla interior'; group.add(scr);
-      const gl = new THREE.Mesh(face.geometry, this.glareMat); gl.position.z = z0 + 0.05; group.add(gl); this.glare.push(gl);
-      // Cara exterior (se mira desde -z; los materiales son de dos caras)
-      const back = new THREE.Mesh(new THREE.ShapeGeometry(roundedShape(x0 + 0.4, -H / 2 + 0.4, x1 - 0.4, H / 2 - 0.4, r.map(v => Math.max(0.1, v - 0.4)) as typeof r), 24), side > 0 ? glassMat : this.backMat);
-      back.position.z = zb; group.add(back);
-      const glb = new THREE.Mesh(back.geometry, this.glareMat); glb.position.z = zb - 0.05; group.add(glb); this.glare.push(glb);
-      if (side > 0) {
-        // Pantalla exterior centrada en la mitad que gira. Vista desde atrás, +x queda a la izquierda: la U va espejada.
-        const ow = OUTER_MM[0], oh = OUTER_MM[1], cx = W / 2;
-        const so = roundedShape(cx - ow / 2, -oh / 2, cx + ow / 2, oh / 2, [R_SCREEN, R_SCREEN, R_SCREEN, R_SCREEN]);
-        const os = new THREE.Mesh(screenGeometry(so, cx - ow / 2, cx + ow / 2, -oh / 2, oh / 2, true), this.outerMat);
+      const inner = new THREE.Mesh(screenGeometry(roundedShape(side > 0 ? 0 : -iw, -ih / 2, side > 0 ? iw : 0, ih / 2, sr), -iw, iw, -ih / 2, ih / 2), this.innerMat);
+      inner.position.z = zf + 0.02; inner.name = 'Pantalla interior'; group.add(inner);
+      const g1 = new THREE.Mesh(face.geometry, this.glareMat); g1.position.z = zf + 0.05; group.add(g1); this.glare.push(g1);
+      // Dorso
+      const back = new THREE.Mesh(new THREE.ShapeGeometry(faceShape, 28), side < 0 ? glassMat : this.backMat); back.position.z = zb; group.add(back);
+      const g2 = new THREE.Mesh(back.geometry, this.glareMat); g2.position.z = zb - 0.05; group.add(g2); this.glare.push(g2);
+      if (side < 0) {
+        // Pantalla exterior en la mitad que gira; vista desde afuera, +x queda a la izquierda, por eso la U va espejada
+        const ow = OUTER_MM[0], oh = OUTER_MM[1], cx = -W / 2;
+        const os = new THREE.Mesh(screenGeometry(roundedShape(cx - ow / 2, -oh / 2, cx + ow / 2, oh / 2, [R_SCREEN, R_SCREEN, R_SCREEN, R_SCREEN]), cx - ow / 2, cx + ow / 2, -oh / 2, oh / 2, true), this.outerMat);
         os.position.z = zb - 0.02; os.name = 'Pantalla exterior'; group.add(os);
-        // Cámara frontal exterior: esquina superior del lado de la bisagra (vista desde afuera, arriba a la derecha)
-        const cam = new THREE.Mesh(new THREE.CircleGeometry(1.7, 32), new THREE.MeshBasicMaterial({ color: 0x050607, side: THREE.DoubleSide }));
-        cam.position.set(cx - ow / 2 + 7, oh / 2 - 6.5, zb - 0.06); group.add(cam);
+        // Cámara frontal exterior: perforación arriba, en la esquina lejos de la bisagra
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(2.1, 40), new THREE.MeshBasicMaterial({ color: 0x020203, side: THREE.DoubleSide }));
+        hole.position.set(cx - ow / 2 + 7.5, oh / 2 - 7.5, zb - 0.07); group.add(hole);
       } else {
-        // Módulo de cámaras traseras en la mitad fija
-        const ig = new THREE.ExtrudeGeometry(roundedShape(-W + 6, H / 2 - 32, -W + 32, H / 2 - 6, [8, 8, 8, 8]), { depth: 1.2, bevelEnabled: true, bevelThickness: 0.3, bevelSize: 0.3, bevelSegments: 2, curveSegments: 20 });
-        ig.translate(0, 0, -T - 1.5);
-        const isl = new THREE.Mesh(ig, this.islandMat); isl.castShadow = true; group.add(isl);
-        const lensMat = new THREE.MeshPhysicalMaterial({ color: 0x07090c, roughness: 0.05, clearcoat: 1, side: THREE.DoubleSide });
-        for (const [lx, ly] of [[-W + 13, H / 2 - 13], [-W + 25, H / 2 - 25]]) {
-          const ring = new THREE.Mesh(new THREE.CylinderGeometry(5.2, 5.2, 1.4, 40), this.frameMat);
-          ring.rotation.x = Math.PI / 2; ring.position.set(lx, ly, -T - 2.5); ring.castShadow = true; group.add(ring);
-          const lens = new THREE.Mesh(new THREE.CircleGeometry(3.9, 40), lensMat);
-          lens.position.set(lx, ly, -T - 3.22); group.add(lens);
+        // Isla de cámaras en cápsula, arriba en el borde exterior de la mitad fija
+        const iw2 = 40, ih2 = 19.5, ix1 = W - 5.2, iy1 = H / 2 - 5.2;
+        const islandShape = roundedShape(ix1 - iw2, iy1 - ih2, ix1, iy1, [ih2 / 2, ih2 / 2, ih2 / 2, ih2 / 2]);
+        const ig = new THREE.ExtrudeGeometry(islandShape, { depth: 0.9, bevelEnabled: true, bevelThickness: 0.45, bevelSize: 0.6, bevelSegments: 4, curveSegments: 32 });
+        ig.translate(0, 0, -T - 1.35);
+        const isl = new THREE.Mesh(ig, this.islandMat); group.add(isl);
+        const zi = -T - 1.8; // superficie de la isla
+        const cyI = iy1 - ih2 / 2;
+        // Vistas desde atrás las lentes quedan del lado exterior (izquierda), el flash del lado de adentro
+        for (const lx of [ix1 - 9.75, ix1 - 25.2]) {
+          const ring = new THREE.Mesh(new THREE.CylinderGeometry(7.1, 7.3, 1.6, 64, 1, true), this.ringMat);
+          ring.rotation.x = Math.PI / 2; ring.position.set(lx, cyI, zi - 0.8); group.add(ring);
+          const cap = new THREE.Mesh(new THREE.RingGeometry(5.6, 7.1, 64), this.ringMat);
+          cap.position.set(lx, cyI, zi - 1.6); group.add(cap);
+          const lens = new THREE.Mesh(new THREE.CircleGeometry(5.6, 64), lensGlass); lens.position.set(lx, cyI, zi - 1.45); group.add(lens);
+          const iris = new THREE.Mesh(new THREE.RingGeometry(1.4, 3.2, 48), lensIris); iris.position.set(lx, cyI, zi - 1.5); group.add(iris);
         }
-        const flash = new THREE.Mesh(new THREE.CircleGeometry(1.9, 24), new THREE.MeshStandardMaterial({ color: 0xe9e2cf, roughness: 0.4, side: THREE.DoubleSide }));
-        flash.position.set(-W + 25, H / 2 - 13, -T - 1.82); group.add(flash);
+        const flash = new THREE.Mesh(new THREE.CircleGeometry(1.5, 32), new THREE.MeshStandardMaterial({ color: 0xece4cf, roughness: 0.35, side: THREE.DoubleSide }));
+        flash.position.set(ix1 - 36.2, cyI - 3.6, zi - 0.02); group.add(flash);
+        const mic = new THREE.Mesh(new THREE.CircleGeometry(0.9, 24), new THREE.MeshBasicMaterial({ color: 0x0c0d10, side: THREE.DoubleSide }));
+        mic.position.set(ix1 - 36.2, cyI + 3.8, zi - 0.02); group.add(mic);
+        // Botones en el canto exterior de la mitad fija
+        for (const [by, bl] of [[H / 2 - 32, 21], [H / 2 - 60, 12]] as const) {
+          const b = new THREE.Mesh(new THREE.CapsuleGeometry(0.9, bl - 1.8, 6, 16), this.frameMat);
+          b.position.set(W + 0.35, by, -T / 2); group.add(b);
+        }
       }
     };
-    half(-1, this.left);
-    half(1, this.right);
-    // La mitad derecha gira alrededor de un eje a HINGE_GAP / 2 sobre la cara interior
+    half(1, this.fixed);
+    half(-1, this.moving);
     this.pivot.position.set(0, 0, HINGE_GAP / 2);
-    this.right.position.set(0, 0, -HINGE_GAP / 2);
-    this.pivot.add(this.right);
-    // Lomo de la bisagra: visible con el Duo cerrado
-    const spineGeo = new THREE.CapsuleGeometry(DUO.thickFolded / 2 - 0.05, H - DUO.thickFolded - 2, 12, 32);
-    this.spine = new THREE.Mesh(spineGeo, this.frameMat);
-    this.spine.position.set(-(DUO.thickFolded / 2) + (DUO.widthFolded - HALF_W), 0, HINGE_GAP / 2);
-    this.spine.castShadow = true;
-    this.body.add(this.left, this.pivot, this.spine);
+    this.moving.position.set(0, 0, -HINGE_GAP / 2);
+    this.pivot.add(this.moving);
+    // Lomo de la bisagra, visible con el Duo cerrado
+    this.spine = new THREE.Mesh(new THREE.CapsuleGeometry(DUO.thickFolded / 2 - 0.05, H - DUO.thickFolded - 2, 12, 40), this.frameMat);
+    this.spine.position.set(DUO.thickFolded / 2 - (DUO.widthFolded - HALF_W), 0, HINGE_GAP / 2);
+    this.body.add(this.fixed, this.pivot, this.spine);
     this.root.add(this.body);
-    this.left.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
-    this.right.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
+    this.body.traverse(o => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
+    for (const g of this.glare) g.castShadow = false;
   }
 
   setFinish(key: string) {
-    const f = FINISHES[key] ?? FINISHES.natural;
-    this.frameMat.color.set(f.frame); this.backMat.color.set(f.back); this.islandMat.color.set(f.island);
+    const f = FINISHES[key] ?? FINISHES.nocturno;
+    this.frameMat.color.set(f.frame); this.frameMat.roughness = f.frameRough;
+    this.backMat.color.set(f.back); this.islandMat.color.set(f.island); this.ringMat.color.set(f.ring);
   }
 
   setReflections(on: boolean) { for (const g of this.glare) g.visible = on; }
@@ -146,22 +166,22 @@ export class DuoModel {
   /** Ángulo de la bisagra en grados: 0 cerrado, 180 abierto. */
   setAngle(deg: number) {
     this.angle = THREE.MathUtils.clamp(deg, 0, 180);
-    this.pivot.rotation.y = -THREE.MathUtils.degToRad(180 - this.angle);
+    this.pivot.rotation.y = THREE.MathUtils.degToRad(180 - this.angle);
     this.spine.visible = this.angle < 28;
     this.recenter();
   }
 
-  /** Cómo se apoya el Duo en cada pose y orientación. */
-  orientationQuaternion(pose: Pose, ori: Orientation): THREE.Quaternion {
-    const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2);
+  /**
+   * Vertical: parado, con la bisagra vertical. Horizontal: apoyado, con la mitad fija sobre la mesa.
+   * La sujeción no cambia con el ángulo, así mover la bisagra nunca gira el Duo.
+   */
+  orientationQuaternion(_pose: Pose, ori: Orientation): THREE.Quaternion {
+    if (ori === 'vertical') return new THREE.Quaternion();
+    const qz = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2);
     const qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
-    void pose;
-    // Vertical: parado, con la bisagra vertical. Horizontal: apoyado, con la mitad de abajo sobre la mesa.
-    // La sujeción no cambia con el ángulo, así mover la bisagra nunca gira el Duo.
-    return ori === 'horizontal' ? qx.multiply(qz) : new THREE.Quaternion();
+    return qx.multiply(qz);
   }
 
-  ori: Orientation = 'vertical';
   setOrientation(pose: Pose, ori: Orientation, instant = false) {
     this.ori = ori;
     this.targetQ.copy(this.orientationQuaternion(pose, ori));
@@ -171,8 +191,7 @@ export class DuoModel {
   /** Avanza la animación de giro. Devuelve true si todavía se está moviendo. */
   tick(dt: number, reduced: boolean): boolean {
     if (reduced) { this.root.quaternion.copy(this.targetQ); return false; }
-    const d = this.root.quaternion.angleTo(this.targetQ);
-    if (d < 1e-4) return false;
+    if (this.root.quaternion.angleTo(this.targetQ) < 1e-4) return false;
     this.root.quaternion.slerp(this.targetQ, 1 - Math.pow(0.0005, dt));
     return true;
   }
@@ -184,10 +203,9 @@ export class DuoModel {
     const inv = new THREE.Matrix4().copy(this.root.matrixWorld).invert();
     this.body.traverse(o => {
       const m = o as THREE.Mesh;
-      if (!m.isMesh || !m.visible || m.name !== 'Marco' && m !== this.spine) return;
+      if (!m.isMesh || !m.visible || (m.name !== 'Marco' && m !== this.spine)) return;
       m.geometry.computeBoundingBox();
-      const b = m.geometry.boundingBox!.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld));
-      box.union(b);
+      box.union(m.geometry.boundingBox!.clone().applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, m.matrixWorld)));
     });
     const c = box.getCenter(new THREE.Vector3());
     this.body.position.set(-c.x, -c.y, -c.z);
@@ -201,12 +219,13 @@ export class DuoModel {
     return box;
   }
 
-  /** Dirección hacia donde "mira" el Duo, para los encuadres de cámara. */
+  /** Hacia dónde mira el Duo, para los encuadres de cámara. */
   frontDirection(): THREE.Vector3 {
     if (this.ori === 'horizontal') return new THREE.Vector3(0, 0, 1);
-    const n = this.angle <= 15 ? new THREE.Vector3(0, 0, 1)
-      : new THREE.Vector3(0, 0, 1).add(new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), -THREE.MathUtils.degToRad(180 - this.angle))).normalize();
+    if (this.angle <= 15) return new THREE.Vector3(0, 0, 1);
+    const moved = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(180 - this.angle));
+    const n = new THREE.Vector3(0, 0, 1).add(moved);
     if (n.lengthSq() < 1e-6) n.set(0, 0, 1);
-    return n.applyQuaternion(this.targetQ).normalize();
+    return n.normalize();
   }
 }

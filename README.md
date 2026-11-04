@@ -1,33 +1,33 @@
 # DuoMe
 
-Mockups 3D del iPhone Duo en sus tres posiciones (cerrado, semiabierto y abierto), cada una en vertical u horizontal. Subís una imagen por vista, girás el Duo con el mouse y exportás un PNG sin fondo.
+3D mockups of iPhone Duo in its three positions (closed, half-open and open), each one vertical or horizontal. Upload one image per view, rotate the Duo with your mouse and export a PNG with a transparent background.
 
-## Qué hace
+## What it does
 
-- **Modelo 1:1.** El Duo está modelado en milímetros con las medidas publicadas: 117,8 mm de alto, 84,1 mm de ancho cerrado, 164,6 mm abierto, 11,3 mm de grosor cerrado y 5,2 mm abierto. Las pantallas usan su tamaño físico real, calculado a partir de la resolución y la densidad:
-  - exterior: 5,4 in, 1398 x 2034 px a 460 ppi (77,2 x 112,3 mm)
-  - interior: 7,6 in, 2670 x 1878 px a 430 ppi (157,7 x 110,9 mm)
-- **Seis vistas.** Cerrado, semiabierto (libro parado o apoyado como laptop) y abierto, en vertical u horizontal. Cada vista tiene su propia imagen y muestra el tamaño recomendado.
-- **Bisagra libre.** El dial y el campo de grados mueven la bisagra entre 0° y 180°, con topes en 0°, 90° y 180°.
-- **Cámara.** Arrastrá el Duo para girarlo y usá la rueda para acercarte. También hay encuadres rápidos (Frente, Tres cuartos, Perfil, Cenital) y controles de giro e inclinación.
-- **Carga de imágenes.** Arrastrá una imagen sobre su lugar, hacé clic para elegirla, soltala sobre el Duo o pegala con ⌘V. Si soltás varias juntas, DuoMe propone dónde va cada una según su forma.
-- **Exportar PNG.** Se recorta al contorno del Duo, en 2K, 4K u 8K, con fondo transparente y sombra opcional.
-- **Pantalla completa y vista previa** para ver solo el Duo. Esc sale.
-- **Apariencia clara y oscura** según el sistema. También responde a movimiento reducido, transparencia reducida y más contraste.
+- **1:1 model.** The Duo is modeled in millimeters using its published measurements: 117.8 mm tall, 84.1 mm wide closed, 164.6 mm open, 11.3 mm thick closed and 5.2 mm open. The displays use their real physical size, calculated from resolution and pixel density:
+  - outer: 5.4 in, 1398 x 2034 px at 460 ppi (77.2 x 112.3 mm)
+  - inner: 7.6 in, 2670 x 1878 px at 430 ppi (157.7 x 110.9 mm)
+- **Six views.** Closed, half-open (standing like a book or resting like a laptop) and open, vertical or horizontal. Each view has its own image and shows the recommended size.
+- **Free hinge.** The dial and the degrees field move the hinge between 0° and 180°, with stops at 0°, 90° and 180°.
+- **Camera.** Drag the Duo to rotate it and use the wheel to zoom. There are also quick framings (Front, Three-quarter, Side, Top) and turn and tilt controls.
+- **Image upload.** Drag an image onto its slot, drop it on the Duo or paste it with ⌘V. If you drop several at once, DuoMe suggests where each one goes based on its shape.
+- **PNG export.** Cropped to the outline of the Duo, at 2K, 4K or 8K, with a transparent background and optional shadow.
+- **Full screen and preview** to see only the Duo. Esc exits.
+- **Light and dark appearance** following the system. It also responds to reduced motion, reduced transparency and increased contrast.
 
 
-## Usarlo en tu compu
+## Run it on your computer
 
-Necesitás Node 20 o superior.
+You need Node 20 or later.
 
 ```bash
 npm install
 npm run dev
 ```
 
-Abrí la dirección que muestra la terminal (por defecto http://localhost:5173).
+Open the address shown in the terminal (by default http://localhost:5173).
 
-Para generar la versión final en `dist/`:
+To build the final version into `dist/`:
 
 ```bash
 npm run build
@@ -35,6 +35,6 @@ npm run preview
 ```
 
 
-## Notas
+## Notes
 
-- iPhone y iPhone Duo son marcas de Apple Inc. Este proyecto no está afiliado a Apple.
+- iPhone and iPhone Duo are trademarks of Apple Inc. This project is not affiliated with Apple.

@@ -28,8 +28,8 @@ export class ScreenTexture {
     ctx.fillRect(0, 0, W, H);
     if (img && !opts.off) {
       ctx.translate(W / 2, H / 2);
-      // Si la vista está girada respecto del montaje, la parte de arriba de la imagen va al borde derecho
-      if (opts.rotated) ctx.rotate(Math.PI / 2);
+      // En horizontal el Duo gira 90° a la derecha: la parte de arriba de la imagen va al borde izquierdo
+      if (opts.rotated) ctx.rotate(-Math.PI / 2);
       const bw = opts.rotated ? H : W, bh = opts.rotated ? W : H;
       const iw = 'naturalWidth' in img ? img.naturalWidth : img.width, ih = 'naturalHeight' in img ? img.naturalHeight : img.height;
       const s = opts.fit === 'cover' ? Math.max(bw / iw, bh / ih) : Math.min(bw / iw, bh / ih);

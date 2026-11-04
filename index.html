@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>DuoMe, mockups del iPhone Duo</title>
-  <meta name="description" content="Mockups 3D del iPhone Duo cerrado, semiabierto y abierto, en vertical u horizontal. Exportá PNG sin fondo." />
+  <title>DuoMe, iPhone Duo mockups</title>
+  <meta name="description" content="3D mockups of iPhone Duo closed, half-open and open, vertical or horizontal. Export PNGs with a transparent background." />
   <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,47 +15,51 @@
     <header class="topbar">
       <span class="brand">DuoMe</span>
       <div class="topbar-actions">
-        <button class="icon-btn" id="undo" aria-label="Deshacer" title="Deshacer (⌘Z)" disabled>
+        <div class="segmented lang" id="lang" role="radiogroup" data-i18n-aria="lang.label">
+          <button role="radio" data-v="en" aria-checked="true" lang="en" aria-label="English">EN</button>
+          <button role="radio" data-v="es" aria-checked="false" lang="es" aria-label="Español">ES</button>
+        </div>
+        <button class="icon-btn" id="undo" data-i18n-aria="top.undo" data-i18n-title="top.undo" disabled>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 0 0 4l4 4M0 4h10a6 6 0 0 1 0 12H6" /></svg>
         </button>
-        <button class="icon-btn" id="redo" aria-label="Rehacer" title="Rehacer (⇧⌘Z)" disabled>
+        <button class="icon-btn" id="redo" data-i18n-aria="top.redo" data-i18n-title="top.redo" disabled>
           <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m12 0 4 4-4 4m4-4H6a6 6 0 0 0 0 12h4" /></svg>
         </button>
-        <button class="btn" id="preview">Vista previa</button>
+        <button class="btn" id="preview" data-i18n="top.preview">Preview</button>
         <div class="export-wrap">
-          <button class="btn btn-primary" id="export-open" aria-expanded="false" aria-controls="export-pop">Exportar</button>
+          <button class="btn btn-primary" id="export-open" aria-expanded="false" aria-controls="export-pop" data-i18n="top.export">Export</button>
           <div class="popover" id="export-pop" hidden>
-            <p class="pop-title">Exportar PNG</p>
-            <p class="label">Tamaño</p>
-            <div class="segmented" id="export-size" role="radiogroup" aria-label="Tamaño">
+            <p class="pop-title" data-i18n="export.title">Export PNG</p>
+            <p class="label" data-i18n="export.size">Size</p>
+            <div class="segmented" id="export-size" role="radiogroup" data-i18n-aria="export.size">
               <button role="radio" data-v="2048" aria-checked="false">2K</button>
               <button role="radio" data-v="4096" aria-checked="true">4K</button>
               <button role="radio" data-v="8192" aria-checked="false">8K</button>
             </div>
-            <label class="check"><input type="checkbox" id="export-transparent" checked /> Fondo transparente</label>
-            <label class="check"><input type="checkbox" id="export-shadow" checked /> Incluir sombra</label>
-            <p class="hint">El PNG se recorta al contorno del Duo, con la cámara que ves en el lienzo.</p>
-            <button class="btn btn-primary wide" id="export-go">Descargar PNG</button>
+            <label class="check"><input type="checkbox" id="export-transparent" checked /> <span data-i18n="export.transparent">Transparent background</span></label>
+            <label class="check"><input type="checkbox" id="export-shadow" checked /> <span data-i18n="export.shadow">Include shadow</span></label>
+            <p class="hint" data-i18n="export.hint"></p>
+            <button class="btn btn-primary wide" id="export-go" data-i18n="export.go">Download PNG</button>
           </div>
         </div>
       </div>
     </header>
 
-    <aside class="panel left" aria-label="Pantallas">
-      <h2>Pantallas</h2>
-      <p class="sub" id="screens-intro">Cada pose lleva una imagen por orientación. Arrastrala sobre su lugar.</p>
+    <aside class="panel left" data-i18n-aria="screens.title">
+      <h2 data-i18n="screens.title">Screens</h2>
+      <p class="sub" id="screens-intro"></p>
       <div class="grid" id="grid"></div>
-      <p class="sub small" id="grid-hint">Hacé clic en un lugar para verlo en el lienzo.</p>
+      <p class="sub small" id="grid-hint"></p>
       <div class="block" id="fit-block">
-        <p class="label">Si la imagen no encaja</p>
-        <div class="segmented" id="fit" role="radiogroup" aria-label="Si la imagen no encaja">
-          <button role="radio" data-v="cover" aria-checked="true">Recortar</button>
-          <button role="radio" data-v="contain" aria-checked="false">Mostrar entera</button>
+        <p class="label" data-i18n="fit.title"></p>
+        <div class="segmented" id="fit" role="radiogroup" data-i18n-aria="fit.title">
+          <button role="radio" data-v="cover" aria-checked="true" data-i18n="fit.cover"></button>
+          <button role="radio" data-v="contain" aria-checked="false" data-i18n="fit.contain"></button>
         </div>
       </div>
       <div class="block">
-        <label class="row-toggle"><span>Mostrar cámara y pliegue</span><input type="checkbox" role="switch" id="guides" class="switch" /></label>
-        <p class="sub small">Así ves qué partes de tu pantalla quedan tapadas.</p>
+        <label class="row-toggle"><span data-i18n="guides.title"></span><input type="checkbox" role="switch" id="guides" class="switch" /></label>
+        <p class="sub small" data-i18n="guides.hint"></p>
       </div>
       <div class="distribute" id="distribute" hidden></div>
       <input type="file" id="file" accept="image/png,image/jpeg,image/webp" hidden />
@@ -65,67 +69,67 @@
 
     <main class="stage" id="stage">
       <div class="canvas-host" id="canvas-host"></div>
-      <div class="glass orientation" id="orientation" role="radiogroup" aria-label="Orientación">
-        <button role="radio" data-v="vertical" aria-checked="false"><i class="ori v"></i>Vertical</button>
-        <button role="radio" data-v="horizontal" aria-checked="true"><i class="ori h"></i>Horizontal</button>
+      <div class="glass orientation" id="orientation" role="radiogroup" data-i18n-aria="ori.group">
+        <button role="radio" data-v="vertical" aria-checked="true"><i class="ori v"></i><span data-i18n="ori.vertical"></span></button>
+        <button role="radio" data-v="horizontal" aria-checked="false"><i class="ori h"></i><span data-i18n="ori.horizontal"></span></button>
       </div>
-      <button class="glass round fullscreen" id="fullscreen" aria-label="Pantalla completa" title="Pantalla completa">
+      <button class="glass round fullscreen" id="fullscreen">
         <svg viewBox="0 0 16 16" aria-hidden="true" id="fs-icon"><path d="M0 5V0h5M11 0h5v5M16 11v5h-5M5 16H0v-5" /></svg>
       </button>
-      <div class="dropzone" id="dropzone" hidden><span id="dropzone-label">Soltá para</span></div>
+      <div class="dropzone" id="dropzone" hidden><span id="dropzone-label"></span></div>
       <div class="glass dial" id="dial">
         <svg viewBox="0 0 500 226" id="dial-svg" aria-hidden="true"></svg>
-        <div class="dial-readout"><span id="dial-value">180°</span><small>Ángulo de bisagra</small></div>
-        <input type="range" min="0" max="180" step="1" id="dial-input" class="sr-only" aria-label="Ángulo de bisagra" />
-        <button class="detent" data-a="0">Cerrado</button>
-        <button class="detent" data-a="90">Semiabierto</button>
-        <button class="detent" data-a="180">Abierto</button>
-        <button class="dial-toggle" id="dial-toggle" aria-label="Minimizar bisagra" aria-expanded="true" title="Minimizar">
+        <div class="dial-readout"><span id="dial-value">90°</span><small data-i18n="dial.label"></small></div>
+        <input type="range" min="0" max="180" step="1" id="dial-input" class="sr-only" data-i18n-aria="dial.label" />
+        <button class="detent" data-a="0" data-i18n="pose.cerrado"></button>
+        <button class="detent" data-a="90" data-i18n="pose.semiabierto"></button>
+        <button class="detent" data-a="180" data-i18n="pose.abierto"></button>
+        <button class="dial-toggle" id="dial-toggle" data-i18n-aria="dial.minimize" data-i18n-title="dial.minimize" aria-expanded="true">
           <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4.5 6 8.5l4-4" /></svg>
         </button>
-        <button class="dial-mini" id="dial-mini" aria-label="Mostrar control de bisagra"><span>Bisagra</span><b id="dial-mini-value">90°</b>
+        <button class="dial-mini" id="dial-mini" data-i18n-aria="dial.show"><span data-i18n="dial.mini"></span><b id="dial-mini-value">90°</b>
           <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 7.5 6 3.5l4 4" /></svg></button>
       </div>
       <p class="toast" id="toast" role="status" aria-live="polite"></p>
     </main>
 
-    <aside class="panel right" aria-label="Ajustes">
+    <aside class="panel right" data-i18n-aria="insp.hinge">
       <section>
-        <p class="label">Bisagra</p>
+        <p class="label" data-i18n="insp.hinge"></p>
         <div class="field">
-          <input id="angle" type="number" min="0" max="180" step="1" inputmode="numeric" aria-label="Ángulo de bisagra en grados" />
+          <input id="angle" type="number" min="0" max="180" step="1" inputmode="numeric" data-i18n-aria="insp.hingeField" />
           <span class="unit">°</span>
-          <button class="step" id="angle-minus" aria-label="Restar 1°">−</button>
-          <button class="step" id="angle-plus" aria-label="Sumar 1°">+</button>
+          <button class="step" id="angle-minus" data-i18n-aria="insp.minus">−</button>
+          <button class="step" id="angle-plus" data-i18n-aria="insp.plus">+</button>
         </div>
       </section>
       <section>
-        <p class="label">Cámara</p>
+        <p class="label" data-i18n="insp.camera"></p>
         <div class="presets" id="presets">
-          <button data-p="frente">Frente</button>
-          <button data-p="tres">Tres cuartos</button>
-          <button data-p="perfil">Perfil</button>
-          <button data-p="cenital">Cenital</button>
+          <button data-p="frente" data-i18n="cam.frente"></button>
+          <button data-p="tres" data-i18n="cam.tres"></button>
+          <button data-p="perfil" data-i18n="cam.perfil"></button>
+          <button data-p="cenital" data-i18n="cam.cenital"></button>
         </div>
-        <label class="slider"><span>Giro</span><output id="az-out">0°</output><input type="range" id="az" min="-180" max="180" step="1" /></label>
-        <label class="slider"><span>Inclinación</span><output id="el-out">0°</output><input type="range" id="el" min="-10" max="85" step="1" /></label>
-        <p class="sub small">También podés arrastrar el Duo con el mouse y acercarte con la rueda.</p>
+        <label class="slider"><span data-i18n="insp.turn"></span><output id="az-out">0°</output><input type="range" id="az" min="-180" max="180" step="1" /></label>
+        <label class="slider"><span data-i18n="insp.tilt"></span><output id="el-out">0°</output><input type="range" id="el" min="-10" max="85" step="1" /></label>
+        <p class="sub small" data-i18n="insp.mouse"></p>
       </section>
       <section>
-        <p class="label">Acabado</p>
-        <div class="swatches" id="finish" role="radiogroup" aria-label="Acabado"></div>
+        <p class="label" data-i18n="insp.finish"></p>
+        <div class="swatches" id="finish" role="radiogroup" data-i18n-aria="insp.finish"></div>
         <p class="sub" id="finish-name"></p>
       </section>
       <section>
-        <p class="label">Fondo</p>
-        <div class="swatches square" id="background" role="radiogroup" aria-label="Fondo del lienzo"></div>
+        <p class="label" data-i18n="insp.bg"></p>
+        <div class="swatches square" id="background" role="radiogroup" data-i18n-aria="insp.bg"></div>
         <p class="sub" id="bg-name"></p>
       </section>
       <section>
-        <p class="label">Sombra y vidrio</p>
-        <label class="row-toggle spaced"><span>Sombra</span><input type="checkbox" role="switch" id="shadow" class="switch" checked /></label>
-        <label class="slider"><span>Suavidad de la sombra</span><output id="soft-out">60 %</output><input type="range" id="soft" min="0" max="100" step="1" /></label>
-        <label class="row-toggle"><span>Reflejos en el vidrio</span><input type="checkbox" role="switch" id="reflections" class="switch" /></label>
+        <p class="label" data-i18n="insp.shadowGlass"></p>
+        <label class="row-toggle spaced"><span data-i18n="insp.shadow"></span><input type="checkbox" role="switch" id="shadow" class="switch" checked /></label>
+        <label class="slider"><span data-i18n="insp.softness"></span><output id="soft-out">60 %</output><input type="range" id="soft" min="0" max="100" step="1" /></label>
+        <label class="row-toggle"><span data-i18n="insp.reflections"></span><input type="checkbox" role="switch" id="reflections" class="switch" /></label>
       </section>
     </aside>
   </div>

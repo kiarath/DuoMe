@@ -2,8 +2,9 @@ import './style.css';
 import { Stage } from './scene';
 import { FINISHES } from './device';
 import { ScreenTexture, loadImage, type Fit } from './screens';
+import { t, setLang, applyStatic, lang, type Key } from './i18n';
 import {
-  ORI_LABEL, ORIENTATIONS, POSE_ANGLE, POSE_LABEL, POSES, poseFromAngle, slotDisplay, slotPixels,
+  ORIENTATIONS, POSE_ANGLE, POSES, poseFromAngle, slotDisplay, slotPixels,
   type Orientation, type Pose, type SlotKey,
 } from './specs';
 
@@ -13,14 +14,14 @@ interface State {
   angle: number; ori: Orientation; fit: Fit; guides: boolean; finish: string; bg: string; bgImage?: string; soft: number; shadow: boolean; reflections: boolean;
   slots: Partial<Record<SlotKey, string>>; dismissed: string[];
 }
-const BACKGROUNDS: Record<string, { label: string; color: string | null }> = {
-  transparente: { label: 'Transparente', color: null },
-  estudio: { label: 'Estudio', color: 'var(--estudio)' },
-  blanco: { label: 'Blanco', color: '#FFFFFF' },
-  grafito: { label: 'Grafito', color: '#20252B' },
+const BACKGROUNDS: Record<string, { color: string | null }> = {
+  transparente: { color: null },
+  estudio: { color: 'var(--estudio)' },
+  blanco: { color: '#FFFFFF' },
+  grafito: { color: '#20252B' },
 };
 const images = new Map<string, Img>();
-let state: State = { angle: 90, ori: 'vertical', fit: 'cover', guides: false, finish: 'natural', bg: 'estudio', soft: 60, shadow: true, reflections: false, slots: {}, dismissed: [] };
+let state: State = { angle: 90, ori: 'vertical', fit: 'cover', guides: false, finish: 'nocturno', bg: 'estudio', soft: 60, shadow: true, reflections: false, slots: {}, dismissed: [] };
 const past: string[] = [], future: string[] = [];
 const snapshot = () => JSON.stringify(state);
 function commit(mutate: () => void) {
@@ -33,7 +34,9 @@ function redo() { if (!future.length) return; past.push(snapshot()); state = JSO
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const key = (p: Pose, o: Orientation) => `${p}|${o}` as SlotKey;
 const currentKey = () => key(poseFromAngle(state.angle), state.ori);
-const viewName = (k: SlotKey) => { const [p, o] = k.split('|') as [Pose, Orientation]; return `${POSE_LABEL[p]} ${o}`; };
+const poseLabel = (p: Pose) => t(`pose.${p}` as Key);
+const oriLabel = (o: Orientation) => t(`ori.${o}` as Key);
+const viewName = (k: SlotKey) => { const [p, o] = k.split('|') as [Pose, Orientation]; return t('view', { pose: poseLabel(p), ori: t(`ori.lower.${o}` as Key) }); };
 
 // ---------- Escena ----------
 const stage = new Stage($('canvas-host'));
@@ -81,12 +84,12 @@ function renderGrid() {
   grid.innerHTML = '';
   for (const o of ORIENTATIONS) {
     const h = document.createElement('div'); h.className = 'col-head';
-    h.innerHTML = `<i class="ori ${o === 'vertical' ? 'v' : 'h'}"></i>${ORI_LABEL[o]}`; grid.append(h);
+    h.innerHTML = `<i class="ori ${o === 'vertical' ? 'v' : 'h'}"></i>${oriLabel(o)}`; grid.append(h);
   }
   const cur = currentKey();
   for (const p of POSES) {
     const rh = document.createElement('div'); rh.className = 'row-head';
-    rh.innerHTML = `<b>${POSE_LABEL[p]}</b><span>${p === 'cerrado' ? 'pantalla de afuera, 5,4 in' : 'pantalla de adentro, 7,6 in'}</span>`;
+    rh.innerHTML = `<b>${poseLabel(p)}</b><span>${p === 'cerrado' ? t('grid.outer') : t('grid.inner')}</span>`;
     grid.append(rh);
     const notes: HTMLElement[] = [];
     for (const o of ORIENTATIONS) {
@@ -95,15 +98,15 @@ function renderGrid() {
       const slot = document.createElement('div');
       slot.className = 'slot'; slot.tabIndex = 0; slot.setAttribute('role', 'button');
       slot.dataset.key = k;
-      slot.setAttribute('aria-label', `${viewName(k)}${img ? ', con imagen' : ', vacío'}. Tamaño recomendado ${px} por ${py} píxeles.`);
+      slot.setAttribute('aria-label', t(img ? 'slot.with' : 'slot.empty', { view: viewName(k), w: px, h: py }));
       if (k === cur) slot.setAttribute('aria-current', 'true');
       slot.innerHTML = `
         <span class="thumb ${img ? '' : 'empty'} ${fold}" style="width:${tw}px;height:${th}px">${img ? `<img alt="" src="${img.el.src}">` : ''}</span>
-        <button class="corner ${img ? 'remove' : 'upload'}" aria-label="${img ? 'Quitar imagen de ' : 'Subir imagen para '}${viewName(k)}">${img ? ICON_X : ICON_UP}</button>
+        <button class="corner ${img ? 'remove' : 'upload'}" aria-label="${t(img ? 'slot.remove' : 'slot.upload', { view: viewName(k) })}">${img ? ICON_X : ICON_UP}</button>
         <span class="size">${px}px x ${py}px</span>`;
       slot.addEventListener('click', e => {
         const corner = (e.target as HTMLElement).closest('.corner');
-        if (corner && img) { commit(() => { delete state.slots[k]; }); toast(`Imagen quitada de ${viewName(k)}`); return; }
+        if (corner && img) { commit(() => { delete state.slots[k]; }); toast(t('toast.removed', { view: viewName(k) })); return; }
         selectView(p, o);
         // el selector de archivos solo se abre con el botón Subir
         if (corner && !img) { pendingSlot = k; fileInput.value = ''; fileInput.click(); }
@@ -121,8 +124,8 @@ function mismatchNote(k: SlotKey, img: Img, id: string): HTMLElement {
   const [p, o] = k.split('|') as [Pose, Orientation];
   const other: Orientation = o === 'vertical' ? 'horizontal' : 'vertical';
   const el = document.createElement('div'); el.className = 'mismatch'; el.setAttribute('role', 'status');
-  el.innerHTML = `<div>${img.w > img.h ? 'Esta imagen es horizontal' : 'Esta imagen es vertical'} y el lugar de ${viewName(k)} es ${o}. Se va a recortar a los costados.</div>
-    <div class="actions"><button class="primary">Usar en ${ORI_LABEL[other]}</button><button>Recortar</button></div>`;
+  el.innerHTML = `<div>${t(img.w > img.h ? 'mismatch.h' : 'mismatch.v', { view: viewName(k), ori: t(`ori.lower.${o}` as Key) })}</div>
+    <div class="actions"><button class="primary">${t('mismatch.move', { ori: oriLabel(other) })}</button><button>${t('mismatch.keep')}</button></div>`;
   const [move, keep] = el.querySelectorAll('button');
   move.addEventListener('click', () => commit(() => { delete state.slots[k]; state.slots[key(p, other)] = id; state.ori = other; }));
   keep.addEventListener('click', () => commit(() => { state.dismissed.push(`${k}:${id}`); }));
@@ -130,19 +133,19 @@ function mismatchNote(k: SlotKey, img: Img, id: string): HTMLElement {
 }
 
 async function addImage(file: File): Promise<string | null> {
-  if (!file.type.startsWith('image/')) { toast('Ese archivo no es una imagen. Usá PNG, JPG o WebP.'); return null; }
+  if (!file.type.startsWith('image/')) { toast(t('img.notImage')); return null; }
   try {
     const el = await loadImage(file);
     const id = crypto.randomUUID();
-    images.set(id, { el, name: file.name || 'imagen pegada', w: el.naturalWidth, h: el.naturalHeight });
+    images.set(id, { el, name: file.name || t('img.pasted'), w: el.naturalWidth, h: el.naturalHeight });
     return id;
-  } catch { toast('No se pudo leer la imagen. Probá con otro archivo.'); return null; }
+  } catch { toast(t('img.unreadable')); return null; }
 }
 async function putFile(k: SlotKey, file: File) {
   const id = await addImage(file); if (!id) return;
   const [p, o] = k.split('|') as [Pose, Orientation];
   commit(() => { state.slots[k] = id; state.angle = POSE_ANGLE[p]; state.ori = o; });
-  toast(`Imagen agregada a ${viewName(k)}`);
+  toast(t('toast.added', { view: viewName(k) }));
 }
 fileInput.addEventListener('change', () => { const f = fileInput.files?.[0]; if (f && pendingSlot) putFile(pendingSlot, f); });
 filesInput.addEventListener('change', () => { if (filesInput.files?.length) distribute([...filesInput.files]); });
@@ -157,7 +160,7 @@ function wireDrop(slot: HTMLElement, k: SlotKey) {
     e.preventDefault(); e.stopPropagation();
     if (!slot.classList.contains('dragover')) {
       slot.classList.add('dragover');
-      label = document.createElement('span'); label.className = 'drop-label'; label.textContent = `Soltá para ${viewName(k)}`; slot.append(label);
+      label = document.createElement('span'); label.className = 'drop-label'; label.textContent = t('slot.drop', { view: viewName(k) }); slot.append(label);
     }
   });
   const leave = () => { slot.classList.remove('dragover'); label?.remove(); label = null; };
@@ -185,12 +188,13 @@ async function distribute(files: File[]) {
     const ties = scored.filter(s => Math.abs(s.d - best.d) < 0.02 && s.empty === best.empty);
     if (best && best.d < 0.25 && ties.length === 1) { e.target = best.k; taken.add(best.k); }
   }
-  const options = (sel: string) => `<option value="" ${sel ? '' : 'selected'}>Elegí un lugar</option>` + all.map(k => `<option value="${k}" ${sel === k ? 'selected' : ''}>${viewName(k)}</option>`).join('') + `<option value="none">No usar</option>`;
-  box.innerHTML = `<h2>Repartir ${entries.length} ${entries.length === 1 ? 'imagen' : 'imágenes'}</h2>
-    <p class="sub">Cada una va al lugar que coincide con su forma. Cambiá lo que haga falta.</p>
-    ${entries.map((e, i) => `<div class="item ${e.target ? '' : 'ask'}"><img alt="" src="${e.img.el.src}"><div><small>${e.img.name}</small><select data-i="${i}" aria-label="Lugar para ${e.img.name}">${options(e.target)}</select></div></div>`).join('')}
-    ${entries.some(e => !e.target) ? '<p class="sub small">Las marcadas entran en más de un lugar. Elegí cuál.</p>' : ''}
-    <div class="actions"><button id="dist-cancel">Cancelar</button><button class="primary" id="dist-apply">Aplicar</button></div>`;
+  const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+  const options = (sel: string) => `<option value="" ${sel ? '' : 'selected'}>${t('dist.choose')}</option>` + all.map(k => `<option value="${k}" ${sel === k ? 'selected' : ''}>${viewName(k)}</option>`).join('') + `<option value="none">${t('dist.none')}</option>`;
+  box.innerHTML = `<h2>${entries.length === 1 ? t('dist.title.one') : t('dist.title.many', { n: entries.length })}</h2>
+    <p class="sub">${t('dist.sub')}</p>
+    ${entries.map((e, i) => `<div class="item ${e.target ? '' : 'ask'}"><img alt="" src="${e.img.el.src}"><div><small>${esc(e.img.name)}</small><select data-i="${i}" aria-label="${esc(t('dist.for', { name: e.img.name }))}">${options(e.target)}</select></div></div>`).join('')}
+    ${entries.some(e => !e.target) ? `<p class="sub small">${t('dist.ask')}</p>` : ''}
+    <div class="actions"><button id="dist-cancel">${t('dist.cancel')}</button><button class="primary" id="dist-apply">${t('dist.apply')}</button></div>`;
   box.hidden = false;
   box.querySelectorAll('select').forEach(s => s.addEventListener('change', () => {
     const e = entries[Number(s.dataset.i)]; e.target = s.value as SlotKey;
@@ -200,14 +204,14 @@ async function distribute(files: File[]) {
   $('dist-apply').onclick = () => {
     const chosen = entries.filter(e => e.target && e.target !== ('none' as string));
     commit(() => { for (const e of chosen) state.slots[e.target as SlotKey] = e.id; });
-    box.hidden = true; toast(`${chosen.length} ${chosen.length === 1 ? 'imagen agregada' : 'imágenes agregadas'}`);
+    box.hidden = true; toast(chosen.length === 1 ? t('toast.one') : t('toast.many', { n: chosen.length }));
   };
   (box.querySelector('select') as HTMLSelectElement)?.focus();
 }
 
 // Soltar o pegar sobre el lienzo: va a la vista activa
 const stageEl = $('stage'), dropzone = $('dropzone');
-stageEl.addEventListener('dragover', e => { e.preventDefault(); dropzone.hidden = false; $('dropzone-label').textContent = `Soltá para ${viewName(currentKey())}`; });
+stageEl.addEventListener('dragover', e => { e.preventDefault(); dropzone.hidden = false; $('dropzone-label').textContent = t('slot.drop', { view: viewName(currentKey()) }); });
 stageEl.addEventListener('dragleave', e => { if (!stageEl.contains(e.relatedTarget as Node)) dropzone.hidden = true; });
 stageEl.addEventListener('drop', e => { e.preventDefault(); dropzone.hidden = true; const f = filesFrom(e); if (f.length > 1) distribute(f); else if (f[0]) putFile(currentKey(), f[0]); });
 document.querySelector('.panel.left')!.addEventListener('dragover', e => e.preventDefault());
@@ -307,10 +311,10 @@ function syncCamera() {
 }
 stage.onCameraChange = syncCamera;
 
-function swatches(host: HTMLElement, items: Record<string, { label: string; swatch?: string; color?: string | null }>, get: () => string, set: (k: string) => void) {
+function swatches(host: HTMLElement, items: Record<string, { swatch?: string; color?: string | null }>, prefix: string, get: () => string, set: (k: string) => void) {
   host.innerHTML = '';
   for (const [k, v] of Object.entries(items)) {
-    const b = document.createElement('button'); b.setAttribute('role', 'radio'); b.setAttribute('aria-label', v.label); b.title = v.label; b.dataset.k = k;
+    const b = document.createElement('button'); b.setAttribute('role', 'radio'); b.dataset.i18nAria = prefix + k; b.dataset.i18nTitle = prefix + k; b.dataset.k = k;
     const c = v.swatch ?? v.color;
     if (c) b.style.background = c; else b.classList.add('checker');
     b.addEventListener('click', () => commit(() => set(k)));
@@ -318,14 +322,14 @@ function swatches(host: HTMLElement, items: Record<string, { label: string; swat
   }
   return () => host.querySelectorAll<HTMLElement>('button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.k === get())));
 }
-const syncFinish = swatches($('finish'), FINISHES, () => state.finish, k => { state.finish = k; });
-const syncBgBase = swatches($('background'), BACKGROUNDS, () => state.bg, k => { state.bg = k; });
+const syncFinish = swatches($('finish'), FINISHES, 'finish.', () => state.finish, k => { state.finish = k; });
+const syncBgBase = swatches($('background'), BACKGROUNDS, 'bg.', () => state.bg, k => { state.bg = k; });
 const bgHost = $('background');
 const bgUpload = document.createElement('button');
-bgUpload.className = 'bg-upload'; bgUpload.setAttribute('aria-label', 'Subir fondo'); bgUpload.title = 'Subir fondo';
+bgUpload.className = 'bg-upload'; bgUpload.dataset.i18nAria = 'bg.upload'; bgUpload.dataset.i18nTitle = 'bg.upload';
 bgUpload.innerHTML = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 1v10M1 6h10"/></svg>';
 const bgCustom = document.createElement('button');
-bgCustom.setAttribute('role', 'radio'); bgCustom.dataset.k = 'imagen'; bgCustom.setAttribute('aria-label', 'Fondo subido'); bgCustom.title = 'Fondo subido'; bgCustom.hidden = true;
+bgCustom.setAttribute('role', 'radio'); bgCustom.dataset.k = 'imagen'; bgCustom.dataset.i18nAria = 'bg.custom'; bgCustom.dataset.i18nTitle = 'bg.custom'; bgCustom.hidden = true;
 bgCustom.addEventListener('click', () => { if (state.bgImage) commit(() => { state.bg = 'imagen'; }); });
 bgHost.append(bgCustom, bgUpload);
 const bgFile = $<HTMLInputElement>('bg-file');
@@ -334,7 +338,7 @@ bgFile.addEventListener('change', async () => {
   const f = bgFile.files?.[0]; if (!f) return;
   const id = await addImage(f); if (!id) return;
   commit(() => { state.bgImage = id; state.bg = 'imagen'; });
-  toast('Fondo actualizado');
+  toast(t('toast.bg'));
 });
 function syncBg() {
   syncBgBase();
@@ -386,8 +390,8 @@ function setClean(on: boolean) {
   app.classList.toggle('clean', on);
   stage.setLift(on ? 0 : dialLift());
   $('fs-icon').innerHTML = `<path d="${on ? EXIT : ENTER}"/>`;
-  $('fullscreen').setAttribute('aria-label', on ? 'Salir de pantalla completa' : 'Pantalla completa');
-  $('fullscreen').title = on ? 'Salir de pantalla completa (Esc)' : 'Pantalla completa';
+  $('fullscreen').setAttribute('aria-label', on ? t('fs.exit') : t('fs.enter'));
+  $('fullscreen').title = on ? t('fs.exitHint') : t('fs.enter');
 }
 $('fullscreen').addEventListener('click', async () => {
   if (app.classList.contains('clean')) { setClean(false); if (document.fullscreenElement) await document.exitFullscreen(); return; }
@@ -408,7 +412,7 @@ $('export-go').addEventListener('click', async () => {
   const gl = stage.renderer.getContext();
   const max = Math.min(gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), (gl.getParameter(gl.MAX_VIEWPORT_DIMS) as Int32Array)[0]);
   const longSide = Math.min(exportSize, max);
-  const btn = $<HTMLButtonElement>('export-go'); btn.disabled = true; btn.textContent = 'Generando…';
+  const btn = $<HTMLButtonElement>('export-go'); btn.disabled = true; btn.textContent = t('export.busy');
   try {
     const transparent = $<HTMLInputElement>('export-transparent').checked;
     let blob = await stage.exportPNG({
@@ -422,10 +426,10 @@ $('export-go').addEventListener('click', async () => {
     a.href = URL.createObjectURL(blob);
     a.download = `duome-${currentKey().replace('|', '-')}-${longSide}px.png`;
     a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    toast(longSide < exportSize ? `PNG descargado a ${longSide} px, el máximo de esta placa de video` : 'PNG descargado');
+    toast(longSide < exportSize ? t('export.capped', { px: longSide }) : t('export.done'));
     closeExport();
-  } catch { toast('No se pudo generar el PNG. Probá con un tamaño menor.'); }
-  btn.disabled = false; btn.textContent = 'Descargar PNG';
+  } catch { toast(t('export.fail')); }
+  btn.disabled = false; btn.textContent = t('export.go');
 });
 
 /** Pone el render del Duo sobre el fondo subido, recortando el fondo para llenar el PNG. */
@@ -444,6 +448,11 @@ function resolveColor(c: string) {
   return m ? getComputedStyle(document.documentElement).getPropertyValue(m[1]).trim() || '#D9DCDF' : c;
 }
 
+// ---------- Idioma ----------
+const langHost = $('lang');
+langHost.querySelectorAll<HTMLElement>('[role=radio]').forEach(b => b.addEventListener('click', () => { setLang(b.dataset.v as 'en' | 'es'); render(); }));
+function syncLang() { langHost.querySelectorAll<HTMLElement>('[role=radio]').forEach(b => b.setAttribute('aria-checked', String(b.dataset.v === lang))); }
+
 // ---------- Avisos ----------
 let toastTimer = 0;
 function toast(msg: string) {
@@ -461,8 +470,8 @@ function render(instant = false) {
   ($('guides') as HTMLInputElement).checked = state.guides;
   ($('reflections') as HTMLInputElement).checked = state.reflections;
   soft.value = String(state.soft); $('soft-out').textContent = `${state.soft} %`;
-  $('finish-name').textContent = FINISHES[state.finish].label;
-  $('bg-name').textContent = state.bg === 'imagen' ? 'Fondo subido' : BACKGROUNDS[state.bg].label;
+  $('finish-name').textContent = t(`finish.${state.finish}` as Key);
+  $('bg-name').textContent = state.bg === 'imagen' ? t('bg.custom') : t(`bg.${state.bg}` as Key);
   const bg = state.bg === 'imagen' ? null : BACKGROUNDS[state.bg].color;
   const bgImg = state.bg === 'imagen' && state.bgImage ? images.get(state.bgImage) : undefined;
   stageEl.style.backgroundImage = bgImg ? `url("${bgImg.el.src}")` : '';
@@ -474,8 +483,12 @@ function render(instant = false) {
   stageEl.classList.toggle('transparent', !bg && !bgImg);
   if (bg) stageEl.style.setProperty('--canvas-bg', bg); else stageEl.style.removeProperty('--canvas-bg');
   const empty = !Object.keys(state.slots).length;
-  $('screens-intro').textContent = empty ? 'Cada pose lleva una imagen por orientación. Arrastrala sobre su lugar o hacé clic para elegirla.' : 'Cada pose lleva una imagen por orientación. Arrastrala sobre su lugar.';
-  $('grid-hint').textContent = empty ? 'Hacé clic en un lugar para verlo en el lienzo.' : 'Hacé clic en un lugar para verlo en el lienzo. La X quita la imagen.';
+  $('screens-intro').textContent = empty ? t('screens.introEmpty') : t('screens.intro');
+  $('grid-hint').textContent = empty ? t('grid.hint') : t('grid.hintFilled');
+  syncLang(); applyStatic();
+  stage.renderer.domElement.setAttribute('aria-label', t('stage.aria'));
+  $('fullscreen').setAttribute('aria-label', app.classList.contains('clean') ? t('fs.exit') : t('fs.enter'));
+  $('fullscreen').title = app.classList.contains('clean') ? t('fs.exitHint') : t('fs.enter');
   $('fit-block').hidden = empty;
   updateHistoryButtons();
 }

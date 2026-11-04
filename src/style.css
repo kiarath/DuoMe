@@ -218,3 +218,7 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: var(--foc
   .distribute { position: fixed; inset: 56px 0 0 0; width: auto; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* Selector de idioma */
+.segmented.lang { padding: 2px; border-radius: 8px; margin-right: 4px; }
+.segmented.lang button { flex: none; width: 36px; height: 28px; font-size: 12px; font-weight: 500; }
