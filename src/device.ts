@@ -80,7 +80,54 @@ export class DuoModel {
   ori: Orientation = 'vertical';
   private targetQ = new THREE.Quaternion();
 
+  /**
+   * Efectos de pantalla durante la apertura: desenfoque (por nivel de mipmap) y oscurecido.
+   * En la pantalla interior, "a" es la mitad que gira (u < 0,5) y "b" la mitad fija; en la exterior se usa solo "a".
+   */
+  readonly fx = {
+    inner: { blurA: { value: 0 }, dimA: { value: 0 }, dimB: { value: 0 }, split: { value: 1 } },
+    outer: { blurA: { value: 0 }, dimA: { value: 0 }, dimB: { value: 0 }, split: { value: 0 } },
+  };
+
+  private static addFx(mat: THREE.MeshBasicMaterial, u: DuoModel['fx']['inner']) {
+    mat.onBeforeCompile = shader => {
+      shader.uniforms.fxBlurA = u.blurA; shader.uniforms.fxDimA = u.dimA; shader.uniforms.fxDimB = u.dimB; shader.uniforms.fxSplit = u.split;
+      shader.fragmentShader = shader.fragmentShader
+        .replace('void main() {', `uniform float fxBlurA, fxDimA, fxDimB, fxSplit;
+vec4 fxSample(sampler2D m, vec2 uv, float b) {
+  if (b < 0.01) return texture2D(m, uv);
+  vec2 o = exp2(b) / vec2(textureSize(m, 0));
+  return (texture(m, uv, b) * 2.0 + texture(m, uv + vec2(o.x, o.y), b) + texture(m, uv + vec2(-o.x, o.y), b)
+        + texture(m, uv + vec2(o.x, -o.y), b) + texture(m, uv + vec2(-o.x, -o.y), b)) / 6.0;
+}
+void main() {`)
+        .replace('#include <map_fragment>', `#ifdef USE_MAP
+  float fxA = fxSplit > 0.5 ? smoothstep(0.5, 0.47, vMapUv.x) : 1.0;
+  vec4 sampledDiffuseColor = fxSample(map, vMapUv, fxBlurA * fxA);
+  diffuseColor *= sampledDiffuseColor;
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.03, 0.035, 0.04), clamp(fxDimA * fxA + fxDimB * (1.0 - fxA), 0.0, 1.0));
+#endif`);
+    };
+  }
+
+  /**
+   * Cómo se ven las pantallas a un ángulo dado mientras el Duo se mueve, sacado de los cuadros de referencia.
+   * strength: 0 = quieto (sin efectos), 1 = en movimiento.
+   */
+  setMotionFx(strength: number) {
+    const a = this.angle, m = THREE.MathUtils.clamp(strength, 0, 1), ss = THREE.MathUtils.smoothstep;
+    // exterior: se desenfoca apenas se separa y se apaga antes de los 55°
+    this.fx.outer.blurA.value = m * 5 * ss(a, 3, 40);
+    this.fx.outer.dimA.value = m * ss(a, 15, 55);
+    // interior: la mitad que gira llega oscura y desenfocada, se aclara al quedar plana; la fija se enciende al separarse
+    this.fx.inner.blurA.value = m * 5 * (1 - ss(a, 110, 178));
+    this.fx.inner.dimA.value = m * 0.7 * (1 - ss(a, 80, 172));
+    this.fx.inner.dimB.value = m * (1 - ss(a, 4, 30));
+  }
+
   constructor() {
+    DuoModel.addFx(this.innerMat, this.fx.inner);
+    DuoModel.addFx(this.outerMat, this.fx.outer);
     const f = FINISHES.nocturno;
     this.frameMat = new THREE.MeshPhysicalMaterial({ color: f.frame, metalness: 1, roughness: f.frameRough, clearcoat: 0.6, clearcoatRoughness: 0.08 });
     // vidrio trasero esmerilado

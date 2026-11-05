@@ -9,6 +9,7 @@
   - inner: 7.6 in, 2670 x 1878 px at 430 ppi (157.7 x 110.9 mm)
 - **Six views.** Closed, half-open (standing like a book or resting like a laptop) and open, vertical or horizontal. Each view has its own image and shows the recommended size.
 - **Free hinge.** The dial and the degrees field move the hinge between 0° and 180°, with stops at 0°, 90° and 180°.
+- **Hinge animation.** With *Animate hinge* on, the Duo opens and closes smoothly when you move the hinge, and its screens react like the real one: the outer display blurs and turns off, and the inner half that swings sharpens once it lies flat. *Play opening* and *Play closing* run the whole movement.
 - **Camera.** Drag the Duo to rotate it and use the wheel to zoom. There are also quick framings (Front, Three-quarter, Side, Top) and turn and tilt controls.
 - **Image upload.** Drag an image onto its slot, drop it on the Duo or paste it with ⌘V. If you drop several at once, DuoMe suggests where each one goes based on its shape.
 - **PNG export.** Cropped to the outline of the Duo, at 2K, 4K or 8K, with a transparent background and optional shadow.

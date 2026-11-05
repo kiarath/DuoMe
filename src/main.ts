@@ -28,8 +28,8 @@ function commit(mutate: () => void) {
   past.push(snapshot()); if (past.length > 100) past.shift(); future.length = 0;
   mutate(); render();
 }
-function undo() { if (!past.length) return; future.push(snapshot()); state = JSON.parse(past.pop()!); render(true); }
-function redo() { if (!future.length) return; past.push(snapshot()); state = JSON.parse(future.pop()!); render(true); }
+function undo() { if (!past.length) return; stopMotion(); future.push(snapshot()); state = JSON.parse(past.pop()!); render(true); }
+function redo() { if (!future.length) return; stopMotion(); past.push(snapshot()); state = JSON.parse(future.pop()!); render(true); }
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const key = (p: Pose, o: Orientation) => `${p}|${o}` as SlotKey;
@@ -54,13 +54,15 @@ function updateScene(instant = false) {
   stage.duo.setReflections(state.reflections);
   stage.setShadow(state.soft);
   stage.setShadowEnabled(state.shadow);
-  const innerKey = key(pose === 'cerrado' ? 'abierto' : pose, state.ori);
+  // mientras se mueve, la pantalla interior muestra la imagen de la pose de destino, así no salta a mitad de camino
+  const shown = tween ? tweenInnerPose(tween) : pose;
+  const innerKey = key(shown === 'cerrado' ? 'abierto' : shown, state.ori);
   const outerKey = key('cerrado', state.ori);
   const ii = state.slots[innerKey] ? images.get(state.slots[innerKey]!) : undefined;
   const oi = state.slots[outerKey] ? images.get(state.slots[outerKey]!) : undefined;
   innerTex.draw(ii?.el ?? null, { rotated: slotDisplay(innerKey).rotated, fit: state.fit, guides: state.guides, fold: pose === 'semiabierto' });
   // con el Duo abierto la pantalla exterior se apaga, como en el equipo real
-  outerTex.draw(oi?.el ?? null, { rotated: slotDisplay(outerKey).rotated, fit: state.fit, guides: state.guides, off: pose !== 'cerrado' });
+  outerTex.draw(oi?.el ?? null, { rotated: slotDisplay(outerKey).rotated, fit: state.fit, guides: state.guides, off: pose !== 'cerrado' && !inMotion() });
   if (lastPose !== pose && lastPose !== null) stage.invalidate();
   lastPose = pose;
   stage.invalidate();
@@ -252,14 +254,24 @@ function angleFromPointer(e: PointerEvent) {
 }
 let dialStart: string | null = null;
 svg.addEventListener('pointerdown', e => {
-  dialStart = snapshot(); svg.setPointerCapture(e.pointerId);
+  svg.setPointerCapture(e.pointerId);
+  if (animated()) { dialStart = tween?.hist ?? followHist ?? snapshot(); tween = null; followHist = dialStart; dragging = true; follow = angleFromPointer(e); kick(); return; }
+  dialStart = snapshot();
   state.angle = angleFromPointer(e); render();
 });
-svg.addEventListener('pointermove', e => { if (dialStart === null) return; state.angle = angleFromPointer(e); render(); });
-const dialEnd = () => { if (dialStart !== null && dialStart !== snapshot()) { past.push(dialStart); future.length = 0; updateHistoryButtons(); } dialStart = null; };
+svg.addEventListener('pointermove', e => {
+  if (dialStart === null) return;
+  if (dragging) { follow = angleFromPointer(e); kick(); return; }
+  state.angle = angleFromPointer(e); render();
+});
+const dialEnd = () => {
+  if (dragging) { dragging = false; dialStart = null; return; } // el historial se guarda cuando el Duo llega al ángulo
+  if (dialStart !== null && dialStart !== snapshot()) { past.push(dialStart); future.length = 0; updateHistoryButtons(); }
+  dialStart = null;
+};
 svg.addEventListener('pointerup', dialEnd); svg.addEventListener('pointercancel', dialEnd);
-document.querySelectorAll<HTMLElement>('.detent').forEach(b => b.addEventListener('click', () => commit(() => { state.angle = Number(b.dataset.a); })));
-$('dial-input').addEventListener('input', e => commit(() => { state.angle = Number((e.target as HTMLInputElement).value); }));
+document.querySelectorAll<HTMLElement>('.detent').forEach(b => b.addEventListener('click', () => goAngle(Number(b.dataset.a))));
+$('dial-input').addEventListener('input', e => goAngle(Number((e.target as HTMLInputElement).value)));
 
 // Minimizar el dial
 const dialEl = $('dial');
@@ -276,8 +288,8 @@ $('dial-mini').addEventListener('click', () => setDialMin(false));
 
 // ---------- Inspector ----------
 const angleField = $<HTMLInputElement>('angle');
-angleField.addEventListener('change', () => commit(() => { state.angle = Math.min(180, Math.max(0, Math.round(Number(angleField.value) || 0))); }));
-const nudge = (d: number) => (e: MouseEvent) => commit(() => { state.angle = Math.min(180, Math.max(0, state.angle + d * (e.shiftKey ? 10 : 1))); });
+angleField.addEventListener('change', () => goAngle(Math.round(Number(angleField.value) || 0)));
+const nudge = (d: number) => (e: MouseEvent) => goAngle((tween ? tween.to : follow ?? state.angle) + d * (e.shiftKey ? 10 : 1));
 $('angle-minus').addEventListener('click', nudge(-1));
 $('angle-plus').addEventListener('click', nudge(1));
 
@@ -367,9 +379,102 @@ const syncOri = radioGroup($('orientation'), () => state.ori, v => { state.ori =
 function selectView(p: Pose, o: Orientation) {
   const changed = poseFromAngle(state.angle) !== p || state.ori !== o;
   if (!changed) return;
-  commit(() => { state.angle = POSE_ANGLE[p]; state.ori = o; });
+  goAngle(POSE_ANGLE[p], state.ori !== o ? () => { state.ori = o; } : undefined);
   // apoyado como laptop conviene mirarlo un poco más desde arriba
   requestAnimationFrame(() => animateView(...presetFor('tres')));
+}
+
+// ---------- Animación de la bisagra ----------
+// Con "Animar bisagra" activado, el Duo va de un ángulo a otro con el ritmo de una mano que lo abre,
+// y mientras se mueve las pantallas hacen lo que se ve en el equipo real: la exterior se desenfoca y se apaga,
+// y la mitad interior que gira llega oscura y desenfocada hasta quedar plana.
+type Tween = { from: number; to: number; t0: number; dur: number; hist: string | null };
+let animOn = (() => { try { return localStorage.getItem('duome-anim') !== '0'; } catch { return true; } })();
+let tween: Tween | null = null;
+let follow: number | null = null; // ángulo que sigue el dial mientras se arrastra
+let followHist: string | null = null;
+let dragging = false;
+let motion = 0; // 0 quieto, 1 en movimiento: cuánto se notan los efectos de pantalla
+let raf = 0, lastT = 0;
+const animated = () => animOn && !stage.reducedMotion;
+const inMotion = () => !!tween || follow !== null || motion > 0;
+const easeInOut = (k: number) => (k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2);
+function tweenInnerPose(tw: Tween): Pose {
+  const to = poseFromAngle(tw.to);
+  return to === 'cerrado' ? poseFromAngle(tw.from) : to;
+}
+/** Mueve la bisagra sin rehacer toda la interfaz: solo el modelo, el dial y el campo de grados. */
+function liveAngle(a: number) {
+  const before = poseFromAngle(state.angle);
+  state.angle = a;
+  if (poseFromAngle(a) !== before) updateScene(); else { stage.duo.setAngle(a); stage.invalidate(); }
+  drawDial();
+  angleField.value = String(Math.round(a));
+  syncPlay();
+}
+function saveHistory(h: string | null) {
+  if (h && h !== snapshot()) { past.push(h); if (past.length > 100) past.shift(); future.length = 0; }
+}
+function goAngle(to: number, extra?: () => void, force = false) {
+  to = Math.min(180, Math.max(0, to));
+  if (!(force ? !stage.reducedMotion : animated())) { commit(() => { extra?.(); state.angle = to; }); return; }
+  const hist = tween?.hist ?? followHist ?? snapshot();
+  follow = null; followHist = null; dragging = false;
+  if (extra) { extra(); render(); }
+  const from = state.angle;
+  if (Math.abs(to - from) < 0.01) { tween = null; saveHistory(hist); render(); return; }
+  tween = { from, to, t0: performance.now(), dur: 280 + 950 * Math.abs(to - from) / 180, hist };
+  updateScene();
+  kick();
+}
+function stopMotion() { tween = null; follow = null; followHist = null; dragging = false; motion = 0; stage.duo.setMotionFx(0); }
+function kick() { if (!raf) { lastT = performance.now(); raf = requestAnimationFrame(loop); } }
+function loop(t: number) {
+  raf = 0;
+  const dt = Math.min(0.05, (t - lastT) / 1000); lastT = t;
+  let moving = false;
+  if (tween) {
+    const k = Math.min(1, Math.max(0, (t - tween.t0) / tween.dur));
+    liveAngle(tween.from + (tween.to - tween.from) * easeInOut(k));
+    moving = true;
+    if (k >= 1) { const h = tween.hist; tween = null; saveHistory(h); render(); }
+  } else if (follow !== null) {
+    const d = follow - state.angle;
+    if (Math.abs(d) > 0.05) { liveAngle(state.angle + d * (1 - Math.exp(-dt * 11))); moving = true; }
+    else {
+      if (state.angle !== follow) liveAngle(follow);
+      if (!dragging) { follow = null; const h = followHist; followHist = null; saveHistory(h); render(); }
+    }
+  }
+  const was = motion;
+  motion = moving ? Math.min(1, motion + dt * 9) : Math.max(0, motion - dt / 0.45);
+  stage.duo.setMotionFx(motion);
+  stage.invalidate();
+  if (was > 0 && motion === 0) updateScene(); // vuelve al estado quieto: con el Duo abierto, la exterior apagada
+  if (tween || follow !== null || motion > 0) raf = requestAnimationFrame(loop);
+}
+const animToggle = $<HTMLInputElement>('animate');
+animToggle.checked = animOn;
+animToggle.addEventListener('change', () => {
+  animOn = animToggle.checked;
+  try { localStorage.setItem('duome-anim', animOn ? '1' : '0'); } catch { /* sin almacenamiento */ }
+});
+/** Reproduce la apertura completa (o el cierre, si ya está abierto) desde el extremo, con una pausa breve al empezar. */
+function play() {
+  const opening = state.angle <= 90;
+  const start = opening ? 0 : 180, end = opening ? 180 : 0;
+  const hist = tween?.hist ?? followHist ?? snapshot();
+  follow = null; followHist = null; dragging = false; tween = null;
+  liveAngle(start);
+  if (stage.reducedMotion) { state.angle = end; saveHistory(hist); render(); return; }
+  tween = { from: start, to: end, t0: performance.now() + 350, dur: 1500, hist };
+  updateScene();
+  kick();
+}
+$('play').addEventListener('click', play);
+function syncPlay() {
+  const opening = state.angle <= 90;
+  $('play-label').textContent = t(opening ? 'play.open' : 'play.close');
 }
 
 // ---------- Barra superior ----------
@@ -466,6 +571,7 @@ function render(instant = false) {
   renderGrid();
   drawDial();
   angleField.value = String(Math.round(state.angle));
+  syncPlay();
   syncFit(); syncOri(); syncFinish(); syncBg(); syncSize();
   ($('guides') as HTMLInputElement).checked = state.guides;
   ($('reflections') as HTMLInputElement).checked = state.reflections;

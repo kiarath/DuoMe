@@ -222,3 +222,8 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: var(--foc
 /* Selector de idioma */
 .segmented.lang { padding: 2px; border-radius: 8px; margin-right: 4px; }
 .segmented.lang button { flex: none; width: 36px; height: 28px; font-size: 12px; font-weight: 500; }
+
+/* Animación de la bisagra */
+.anim-toggle { margin-top: 16px; }
+.btn.play { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn.play svg { width: 11px; height: 11px; fill: currentColor; stroke: none; }
