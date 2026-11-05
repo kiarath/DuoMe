@@ -66,6 +66,7 @@ export class DuoModel {
   private readonly pivot = new THREE.Group(); // eje de la bisagra
   private readonly moving = new THREE.Group(); // mitad izquierda, gira
   private readonly spine: THREE.Mesh;
+  readonly spineMat: THREE.MeshPhysicalMaterial;
   private readonly crease: THREE.Mesh; // pantalla interior doblada sobre la bisagra
   readonly frameMat: THREE.MeshPhysicalMaterial;
   readonly backMat: THREE.MeshPhysicalMaterial;
@@ -83,6 +84,7 @@ export class DuoModel {
     const f = FINISHES.nocturno;
     this.frameMat = new THREE.MeshPhysicalMaterial({ color: f.frame, metalness: 1, roughness: f.frameRough, clearcoat: 0.6, clearcoatRoughness: 0.08 });
     // vidrio trasero esmerilado
+    this.spineMat = new THREE.MeshPhysicalMaterial({ color: f.frame, metalness: 1, roughness: 0.38, clearcoat: 0.2, clearcoatRoughness: 0.4 });
     this.backMat = new THREE.MeshPhysicalMaterial({ color: f.back, metalness: 0, roughness: 0.62, clearcoat: 0.25, clearcoatRoughness: 0.5, side: THREE.DoubleSide });
     this.islandMat = new THREE.MeshPhysicalMaterial({ color: f.island, metalness: 0, roughness: 0.4, clearcoat: 0.6, clearcoatRoughness: 0.2 });
     this.ringMat = new THREE.MeshPhysicalMaterial({ color: f.ring, metalness: 1, roughness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
@@ -120,7 +122,7 @@ export class DuoModel {
         const os = new THREE.Mesh(screenGeometry(roundedShape(cx - ow / 2, -oh / 2, cx + ow / 2, oh / 2, [R_SCREEN, R_SCREEN_HINGE, R_SCREEN_HINGE, R_SCREEN]), cx - ow / 2, cx + ow / 2, -oh / 2, oh / 2, true), this.outerMat);
         os.position.z = zb - 0.02; os.name = 'Pantalla exterior'; group.add(os);
         // Cámara frontal exterior: perforación arriba, en la esquina lejos de la bisagra
-        const hole = new THREE.Mesh(new THREE.CircleGeometry(2.1, 40), new THREE.MeshBasicMaterial({ color: 0x020203, side: THREE.DoubleSide }));
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(2.1, 40), new THREE.MeshBasicMaterial({ color: 0x020203, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -16 }));
         hole.position.set(cx - ow / 2 + 7.5, oh / 2 - 7.5, zb - 0.07); group.add(hole);
       } else {
         // Isla de cámaras en cápsula, arriba en el borde exterior de la mitad fija
@@ -156,9 +158,17 @@ export class DuoModel {
     this.pivot.position.set(0, 0, HINGE_GAP / 2);
     this.moving.position.set(0, 0, -HINGE_GAP / 2);
     this.pivot.add(this.moving);
-    // Lomo de la bisagra, visible con el Duo cerrado: canto recto de arriba abajo, esquinas sin redondear
-    this.spine = new THREE.Mesh(new THREE.CylinderGeometry(DUO.thickFolded / 2 - 0.05, DUO.thickFolded / 2 - 0.05, H - 1, 48), this.frameMat);
-    this.spine.position.set(DUO.thickFolded / 2 - (DUO.widthFolded - HALF_W), 0, HINGE_GAP / 2);
+    // Bisagra: barra plana de metal satinado, metida entre los cantos redondeados de las dos mitades.
+    // Gira la mitad del ángulo de la mitad móvil, así su cara plana siempre mira hacia afuera del pliegue.
+    // Cerrado, su cara queda a 1,8 mm del eje (84,1 - 82,3) y cubre todo el espesor (11,3 mm). Abierto, queda escondida detrás.
+    const sw = DUO.thickFolded / 2 - 0.08, sOut = DUO.widthFolded - HALF_W, sIn = 0.55, sLen = H - 3;
+    const sGeo = new THREE.ExtrudeGeometry(roundedShape(-sw, sIn, sw, sOut - 0.35, [0.6, 0.6, 0.6, 0.6]),
+      { depth: sLen - 0.7, bevelEnabled: true, bevelThickness: 0.35, bevelSize: 0.35, bevelSegments: 4, curveSegments: 8 });
+    sGeo.translate(0, 0, -(sLen - 0.7) / 2);
+    sGeo.rotateX(-Math.PI / 2); // ancho sobre x, hacia afuera en -z, largo sobre y (abierto)
+    this.spine = new THREE.Mesh(sGeo, this.spineMat);
+    this.spine.name = 'Bisagra';
+    this.spine.position.set(0, 0, HINGE_GAP / 2);
     // Pliegue: la pantalla interior se curva alrededor del eje de la bisagra, así no queda una ranura entre las mitades
     this.crease = new THREE.Mesh(new THREE.BufferGeometry(), this.innerMat);
     this.crease.name = 'Pliegue';
@@ -170,7 +180,7 @@ export class DuoModel {
 
   setFinish(key: string) {
     const f = FINISHES[key] ?? FINISHES.nocturno;
-    this.frameMat.color.set(f.frame); this.frameMat.roughness = f.frameRough;
+    this.frameMat.color.set(f.frame); this.frameMat.roughness = f.frameRough; this.spineMat.color.set(f.frame);
     this.backMat.color.set(f.back); this.islandMat.color.set(f.island); this.ringMat.color.set(f.ring);
   }
 
@@ -209,7 +219,7 @@ export class DuoModel {
   setAngle(deg: number) {
     this.angle = THREE.MathUtils.clamp(deg, 0, 180);
     this.pivot.rotation.y = THREE.MathUtils.degToRad(180 - this.angle);
-    this.spine.visible = this.angle < 28;
+    this.spine.rotation.y = THREE.MathUtils.degToRad(180 - this.angle) / 2;
     this.updateCrease();
     this.recenter();
   }
