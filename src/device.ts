@@ -161,8 +161,10 @@ export class DuoModel {
     // Bisagra: barra plana de metal satinado, metida entre los cantos redondeados de las dos mitades.
     // Gira la mitad del ángulo de la mitad móvil, así su cara plana siempre mira hacia afuera del pliegue.
     // Cerrado, su cara queda a 1,8 mm del eje (84,1 - 82,3) y cubre todo el espesor (11,3 mm). Abierto, queda escondida detrás.
-    const sw = DUO.thickFolded / 2 - 0.08, sOut = DUO.widthFolded - HALF_W, sIn = 0.55, sLen = H - 3;
-    const sGeo = new THREE.ExtrudeGeometry(roundedShape(-sw, sIn, sw, sOut - 0.35, [0.6, 0.6, 0.6, 0.6]),
+    // La cara interior queda a 0,95 mm del eje: más lejos que la pantalla interior (0,41 mm),
+    // así la barra nunca atraviesa la pantalla, en ningún ángulo.
+    const sw = DUO.thickFolded / 2 - 0.08, sOut = DUO.widthFolded - HALF_W, sIn = 0.95 + 0.35, sLen = H - 3;
+    const sGeo = new THREE.ExtrudeGeometry(roundedShape(-sw, sIn, sw, sOut - 0.35, [0.2, 0.2, 0.2, 0.2]),
       { depth: sLen - 0.7, bevelEnabled: true, bevelThickness: 0.35, bevelSize: 0.35, bevelSegments: 4, curveSegments: 8 });
     sGeo.translate(0, 0, -(sLen - 0.7) / 2);
     sGeo.rotateX(-Math.PI / 2); // ancho sobre x, hacia afuera en -z, largo sobre y (abierto)
